@@ -6,6 +6,14 @@ struct Temporary
 {
     alias TempId = long;
 
+    enum Size
+    {
+        Byte,
+        Half,
+        Double,
+        Quad,
+    }
+
     enum Kind
     {
         Spilled,
@@ -13,6 +21,7 @@ struct Temporary
         SavedRegister,
     }
 
+    Size size;
     Kind kind;
     TempId id;
     string value;
@@ -29,6 +38,14 @@ struct Temporary
     {
         this.kind = kind;
         this.value = value;
+        this.id = id_counter++;
+    }
+
+    this(Kind kind, Size size, size_t offset)
+    {
+        this.kind = kind;
+        this.size = size;
+        this.offset = offset;
         this.id = id_counter++;
     }
 
@@ -52,6 +69,26 @@ struct Temporary
     static Temporary newSpilled(size_t offset)
     {
         return Temporary(Kind.Spilled, offset);
+    }
+
+    static Temporary newSpilledByte(size_t offset)
+    {
+        return Temporary(Kind.Spilled, Size.Byte, offset);
+    }
+
+    static Temporary newSpilledHalf(size_t offset)
+    {
+        return Temporary(Kind.Spilled, Size.Half, offset);
+    }
+
+    static Temporary newSpilledDouble(size_t offset)
+    {
+        return Temporary(Kind.Spilled, Size.Double, offset);
+    }
+
+    static Temporary newSpilledQuad(size_t offset)
+    {
+        return Temporary(Kind.Spilled, Size.Quad, offset);
     }
 
     static Temporary newInRegister()
