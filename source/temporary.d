@@ -10,15 +10,24 @@ struct Temporary
     {
         Spilled,
         InRegister,
+        SavedRegister,
     }
 
     Kind kind;
     TempId id;
+    string value;
     static TempId id_counter;
 
     this(Kind kind)
     {
         this.kind = kind;
+        this.id = id_counter++;
+    }
+
+    this(Kind kind, string value)
+    {
+        this.kind = kind;
+        this.value = value;
         this.id = id_counter++;
     }
 
@@ -42,14 +51,21 @@ struct Temporary
         return Temporary(Kind.InRegister);
     }
 
+    static Temporary newSavedRegister(string value)
+    {
+        return Temporary(Kind.SavedRegister, value);
+    }
+
     string toString() const
     {
         import std.format : format;
 
         if (this.kind == Kind.Spilled)
             return format("m%d", this.id);
-        else
+        else if (this.kind == Kind.InRegister)
             return format("r%d", this.id);
+        else
+            return format("[%d]{%s}", this.id, this.value);
     }
 }
 
@@ -102,6 +118,8 @@ struct Label
         import std.format : format;
 
         if (this.kind == Kind.Local)
+            return format("%s:", this.name);
+        else if (this.kind == Kind.Global)
             return format("%s:", this.name);
         else
             return format(".%s:", this.name);
