@@ -14,18 +14,25 @@ struct BasicBlock(T)
 {
     alias BBSet = Set!(BasicBlock!T);
 
-    private BBSet predecessors;
-    private BBSet successors;
+    BBSet predecessors;
+    BBSet successors;
     T value;
     Tag tag;
     bool visited;
+    bool terminal;
     static Tag global_tag;
 
-    this(T value)
+    this(T value, bool terminal)
     {
         this.value = value;
         this.visited = false;
+        this.terminal = terminal;
         this.tag = this.global_tag++;
+    }
+
+    void resetVisited()
+    {
+        this.visited = false;
     }
 
     void setTag(Tag tag)
@@ -38,19 +45,19 @@ struct BasicBlock(T)
         return this.tag;
     }
 
-    void insertSuccessor(BasicBlock!T successor)
+    void addSuccessor(BasicBlock!T successor)
     {
         this.successors ~= successor;
     }
 
-    void insertPredecessor(BasicBlock!T predecessor)
+    void addPredecessor(BasicBlock!T predecessor)
     {
         this.predecessors ~= predecessor;
     }
 
     BBSet getNeighbors()
     {
-        return this.successors + this.predecessors;
+        return this.successors;
     }
 
     Tag toHash()
@@ -69,7 +76,7 @@ struct BasicBlock(T)
 
     void depthFirstSearch(F)(F processor)
     {
-        foreach (ref neighbor; getNeighbors())
+        foreach (ref neighbor; getNeighbors()[])
         {
             Stack!(BasicBlock!T) stack;
             neighbor.visited = true;
@@ -80,7 +87,7 @@ struct BasicBlock(T)
                 auto current = stack.pop();
                 processor(current);
 
-                foreach (ref neighbor_prime; current.getNeighbors())
+                foreach (ref neighbor_prime; current.getNeighbors()[])
                 {
                     if (!neighbor_prime.visited)
                     {
@@ -95,7 +102,7 @@ struct BasicBlock(T)
 
     void breadthFirstSearch(F)(F processor)
     {
-        foreach (ref neighbor; getNeighbors())
+        foreach (ref neighbor; getNeighbors()[])
         {
             Queue!(BasicBlock!T) queue;
             neighbor.visited = true;
@@ -105,7 +112,7 @@ struct BasicBlock(T)
             {
                 auto current = queue.dequeue();
                 processor(current);
-                foreach (ref neighbor_prime; neighbor.getNeighbors())
+                foreach (ref neighbor_prime; neighbor.getNeighbors()[])
                 {
                     if (!neighbor_prime.visited)
                     {
@@ -123,10 +130,35 @@ class CFG(T)
 {
     alias BBSet = Set!(BasicBlock!T);
     alias BBTable = BBSet*[BasicBlock!T];
+    alias DFST = Tag[][BasicBlock!T];
 
     BasicBlock!T entry;
     BasicBlock!T exit;
     BBSet nodes;
+
+    this()
+    {
+        this.entry = BasicBlock(T.init, false);
+        this.exit = BasicBlock(T.init, true);
+        this.nodes = BBSet();
+    }
+
+    void addNode(BasicBlock!T node)
+    {
+        this.nodes ~= node;
+    }
+
+    void addEdge(BasicBlock!T from, BasicBlock!T to)
+    {
+        from.addSuccessor(to);
+        to.addPredecessor(from);
+        addNode(from);
+    }
+
+    void resetVisited()
+    {
+        this.nodes.iter!(x => x.resetVisited());
+    }
 
     BBTable getAsTable()
     {
@@ -165,5 +197,18 @@ class CFG(T)
         }
 
         return out_values;
+    }
+
+    DFST computeDFST()
+    {
+        resetVisited();
+        DFST dfst = null;
+        foreach (node; this.nodes[])
+        {
+            auto tags = new Tag[];
+            node.depthFirstSearch!(x => tags ~= x.getTag());
+            dfst[node] = tags;
+        }
+        return dfst;
     }
 }
