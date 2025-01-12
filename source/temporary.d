@@ -16,6 +16,7 @@ struct Temporary
     Kind kind;
     TempId id;
     string value;
+    size_t offset;
     static TempId id_counter;
 
     this(Kind kind)
@@ -31,6 +32,13 @@ struct Temporary
         this.id = id_counter++;
     }
 
+    this(Kind kind, size_t offset)
+    {
+        this.kind = kind;
+        this.offset = offset;
+        this.id = id_counter++;
+    }
+
     void resetIdCounter()
     {
         this.id_counter = 0;
@@ -41,9 +49,9 @@ struct Temporary
         return this.id;
     }
 
-    static Temporary newSpilled()
+    static Temporary newSpilled(size_t offset)
     {
-        return Temporary(Kind.Spilled);
+        return Temporary(Kind.Spilled, offset);
     }
 
     static Temporary newInRegister()
