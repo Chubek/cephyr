@@ -66,4 +66,9 @@ struct Stack(T)
     {
         return this.container.front;
     }
+
+    bool isEmpty() const
+    {
+        return this.container.empty;
+    }
 }
