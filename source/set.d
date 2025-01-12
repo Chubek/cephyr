@@ -4,6 +4,8 @@ import std.typecons, std.algorithm, std.array, std.container, std.range;
 
 class Set(T)
 {
+    alias opSlice = this.container.opSlice;
+
     SList!T container;
     size_t num_items;
 
@@ -11,7 +13,7 @@ class Set(T)
     {
         foreach (initial; initials)
             this.container.insert(initial);
-        this.num_items = 0;
+        this.num_items = initials.length;
     }
 
     this()
@@ -115,4 +117,18 @@ class Set(T)
     {
         insert(item);
     }
+
+    bool opEquals(const Set!T rhs) const
+    {
+        foreach (elt; this.container[])
+        {
+            foreach (elt_prime; rhs[])
+            {
+                if (elt != elt_prime)
+                    return false;
+            }
+        }
+        return true;
+    }
+
 }

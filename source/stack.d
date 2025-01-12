@@ -4,6 +4,8 @@ import std.typecons, std.container, std.range, std.algorithm;
 
 struct Stack(T)
 {
+    alias opSlice = this.container.opSlice;
+
     SList!T container;
     size_t num_items;
 

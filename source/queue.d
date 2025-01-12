@@ -4,6 +4,8 @@ import std.typecons, std.container, std.array, std.algorithm, std.range;
 
 struct Queue(T)
 {
+    alias opSlice = this.container.opSlice;
+
     DList!T container;
     size_t num_items;
 
