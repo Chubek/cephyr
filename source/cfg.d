@@ -54,11 +54,25 @@ struct BasicBlock(T)
     {
         foreach (ref neighbor; getNeighbors())
         {
-            if (neighbor.visited)
-                continue;
-            processor(neighbor);
+            Stack!(BasicBlock!T) stack;
             neighbor.visited = true;
-            neighbor.depthFirstSearch(processor);
+
+            stack.push(neighbor);
+            while (!stack.isEmpty())
+            {
+                auto current = stack.pop();
+                processor(current);
+
+                foreach (ref neighbor_prime; current.getNeighbors())
+                {
+                    if (!neighbor_prime.visited)
+                    {
+                        neighbor_prime.visited = true;
+                        stack.push(neighbor);
+                    }
+                }
+            }
+
         }
     }
 
