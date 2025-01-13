@@ -77,6 +77,8 @@ class CFG
     {
         from.addSuccessor(to);
         to.addPredecessor(from);
+	this.nodes ~= from;
+	this.nodes ~= to;
         this.edges ~= tuple!("from", "to")(from, to);
     }
 
