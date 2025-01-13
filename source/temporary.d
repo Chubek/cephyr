@@ -5,6 +5,7 @@ import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.con
 struct Temporary
 {
     alias TempId = long;
+    alias Color = int;
 
     enum Size
     {
@@ -26,6 +27,7 @@ struct Temporary
     TempId id;
     string value;
     size_t offset;
+    Color color = -1;
     static TempId id_counter;
 
     this(Kind kind)
@@ -64,6 +66,23 @@ struct Temporary
     TempId getId() const
     {
         return this.id;
+    }
+
+    void setColor(Color color)
+    {
+        this.color = color;
+    }
+
+    Color getColor() const
+    {
+        return this.color;
+    }
+
+    void spillToMemory(size_t offset, Size size)
+    {
+        this.kind = Kind.Spilled;
+        this.offset = offset;
+        this.size = size;
     }
 
     static Temporary newSpilled(size_t offset)
