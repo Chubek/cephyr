@@ -27,6 +27,7 @@ struct Temporary
     TempId id;
     string value;
     size_t offset;
+    bool defines;
     Color color = -1;
     static TempId id_counter;
 
@@ -56,6 +57,16 @@ struct Temporary
         this.kind = kind;
         this.offset = offset;
         this.id = id_counter++;
+    }
+
+    void setDefines()
+    {
+	this.defines = true;
+    }
+
+    void setUses()
+    {
+	this.defines = false;
     }
 
     void resetIdCounter()
