@@ -5,6 +5,7 @@ import std.typecons, std.algorithm, std.array, std.container, std.range;
 class Set(T)
 {
     alias opSlice = this.container.opSlice;
+    alias opIndex = this.container.opIndex;
 
     SList!T container;
     size_t num_items;
@@ -52,8 +53,15 @@ class Set(T)
         return result;
     }
 
+    size_t getLength() const
+    {
+        return this.num_items;
+    }
+
     void insert(T item)
     {
+        if (hasItem(item))
+            return;
         this.container.insert(item);
         this.num_items++;
     }
@@ -116,6 +124,11 @@ class Set(T)
     void opBinary(string op)(T item) if (op == "~=")
     {
         insert(item);
+    }
+
+    bool opBinary(string op)(T item) if (op == "in")
+    {
+        return hasItem(item);
     }
 
     bool opEquals(const Set!T rhs) const
