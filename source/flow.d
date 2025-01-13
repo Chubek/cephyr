@@ -7,12 +7,10 @@ import cephyr.stack;
 import cephyr.queue;
 import cephyr.assem;
 
-alias Daton = Assem;
+enum DJB2_INIT = 5381;
 
 class BasicBlock
 {
-    enum DJB2_INIT = 5381;
-
     Set!BasicBlock predecessors;
     Set!BasicBlock successors;
     Assem data;
@@ -51,6 +49,28 @@ class BasicBlock
     }
 }
 
+class Daton
+{
+    Assem data;
+    int id;
+    static int id_counter;
+
+    this(Assem data)
+    {
+        this.data = data;
+        this.id = this.id_counter++;
+    }
+
+    size_t toHash()
+    {
+        size_t hash = DJB2_INIT;
+        foreach (chr; this.id.to!string)
+            hash = (hash << 5) + hash + chr;
+        return hash;
+    }
+
+}
+
 class CFG
 {
     alias BBlockEdge = Tuple!(BasicBlock, "from", BasicBlock, "to");
@@ -77,8 +97,8 @@ class CFG
     {
         from.addSuccessor(to);
         to.addPredecessor(from);
-	this.nodes ~= from;
-	this.nodes ~= to;
+        this.nodes ~= from;
+        this.nodes ~= to;
         this.edges ~= tuple!("from", "to")(from, to);
     }
 
@@ -168,7 +188,7 @@ class CFG
         {
             foreach (succ; node.successors[])
             {
-                auto runner = Set(succ);
+                auto runner = dominators[succ];
                 while (runner != dominators[node])
                 {
                     output[runner] ~= node;
@@ -190,7 +210,7 @@ class CFG
         {
             foreach (pred; node.predecessors[])
             {
-                auto runner = Set(pred);
+                auto runner = post_dominators[pred];
                 while (runner != post_dominators[node])
                 {
                     output[runner] ~= node;
@@ -221,5 +241,22 @@ class CFG
         }
 
         return idoms;
+    }
+}
+
+class DFG
+{
+    alias DatonEdge = Tuple!(Daton, "from", Daton, "to");
+    alias Edges = Set!DatonEdge;
+    alias Nodes = Set!Daton;
+
+    Nodes nodes;
+    Edges edges;
+
+    void addEdge(Daton from, Daton to)
+    {
+	this.nodes ~= from;
+	this.nodes ~= to;
+	this.edges ~= tuple!("from", "to")(from, to);
     }
 }
