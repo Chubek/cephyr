@@ -1,175 +1,77 @@
 module cephyr.cfg;
 
-import std.typecons, std.variant, std.sumtype, std.array, std.algorithm;
+import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.range;
 
 import cephyr.set;
 import cephyr.stack;
 import cephyr.queue;
+import cephyr.assem;
 
-enum HASH_CONST = 0x45d9f3b;
+alias Daton = Assem;
 
-alias Tag = size_t;
-
-struct BasicBlock(T)
+class BasicBlock
 {
-    alias BBSet = Set!(BasicBlock!T);
+    Set!BasicBlock predecessors;
+    Set!BasicBlock successors;
+    Assem data;
+    bool is_terminal;
 
-    BBSet predecessors;
-    BBSet successors;
-    T value;
-    Tag tag;
-    bool visited;
-    bool terminal;
-    static Tag global_tag;
-
-    this(T value, bool terminal)
+    this(Assem data, bool is_terminal = false)
     {
-        this.value = value;
-        this.visited = false;
-        this.terminal = terminal;
-        this.tag = this.global_tag++;
+        this.data = data;
+        this.is_terminal = is_terminal;
     }
 
-    void resetVisited()
+    void addPredecessor(BasicBlock block)
     {
-        this.visited = false;
+        this.predecessors ~= block;
     }
 
-    void setTag(Tag tag)
+    void addSuccessor(BasicBlock block)
     {
-        this.tag = tag;
-    }
-
-    Tag getTag() const
-    {
-        return this.tag;
-    }
-
-    void addSuccessor(BasicBlock!T successor)
-    {
-        this.successors ~= successor;
-    }
-
-    void addPredecessor(BasicBlock!T predecessor)
-    {
-        this.predecessors ~= predecessor;
-    }
-
-    BBSet getNeighbors()
-    {
-        return this.successors;
-    }
-
-    Tag toHash()
-    {
-        auto tag = this.tag;
-        tag ^= tag >> 16;
-        tag *= HASH_CONST;
-        tag ^= tag >> 16;
-        return tag;
-    }
-
-    bool opEquals(const BasicBlock!T rhs) const
-    {
-        return this.tag == rhs.tag;
-    }
-
-    void depthFirstSearch(F)(F processor)
-    {
-        foreach (ref neighbor; getNeighbors()[])
-        {
-            Stack!(BasicBlock!T) stack;
-            neighbor.visited = true;
-
-            stack.push(neighbor);
-            while (!stack.isEmpty())
-            {
-                auto current = stack.pop();
-                processor(current);
-
-                foreach (ref neighbor_prime; current.getNeighbors()[])
-                {
-                    if (!neighbor_prime.visited)
-                    {
-                        neighbor_prime.visited = true;
-                        stack.push(neighbor);
-                    }
-                }
-            }
-
-        }
-    }
-
-    void breadthFirstSearch(F)(F processor)
-    {
-        foreach (ref neighbor; getNeighbors()[])
-        {
-            Queue!(BasicBlock!T) queue;
-            neighbor.visited = true;
-
-            queue.enqueue(neighbor);
-            while (!queue.isEmpty())
-            {
-                auto current = queue.dequeue();
-                processor(current);
-                foreach (ref neighbor_prime; neighbor.getNeighbors()[])
-                {
-                    if (!neighbor_prime.visited)
-                    {
-                        neighbor_prime.visited = true;
-                        queue.enqueue(neighbor_prime);
-                    }
-                }
-
-            }
-        }
+        this.successors ~= block;
     }
 }
 
-class CFG(T)
+class CFG
 {
-    alias BBSet = Set!(BasicBlock!T);
-    alias BBTable = BBSet*[BasicBlock!T];
-    alias DFST = Tag[][BasicBlock!T];
+    alias BBlockEdge = Tuple!(BasicBlock, "from", BasicBlock, "to");
+    alias BBSet = Set!BasicBlock;
+    alias Edges = Set!BBlockEdge;
+    alias Dominators = BBSet[BasicBlock];
 
-    BasicBlock!T entry;
-    BasicBlock!T exit;
+    BasicBlock entry;
+    BasicBlock exit;
     BBSet nodes;
+    Edges edges;
 
-    this()
+    this(Assem entry, Assem exit)
     {
-        this.entry = BasicBlock(T.init, false);
-        this.exit = BasicBlock(T.init, true);
-        this.nodes = BBSet();
+        this.entry = new BasicBlock(entry);
+        this.exit = new BasicBlock(exit, true);
+        this.nodes ~= this.entry;
+        this.nodes ~= this.exit;
+        addEdge(this.entry, this.exit);
     }
 
-    void addNode(BasicBlock!T node)
-    {
-        this.nodes ~= node;
-    }
-
-    void addEdge(BasicBlock!T from, BasicBlock!T to)
+    void addEdge(BasicBlock from, BasicBlock to)
     {
         from.addSuccessor(to);
         to.addPredecessor(from);
-        addNode(from);
+        this.edges ~= tuple!("from", "to")(from, to);
     }
 
-    void resetVisited()
+    Dominators computeDominators()
     {
-        this.nodes.iter!(x => x.resetVisited());
-    }
+        Dominators output = null;
+        output[this.entry] = Set(this.entry);
 
-    BBTable getAsTable()
-    {
-        BBTable table;
-        nodes.iter!(x => table[x] = &this.nodes);
-    }
-
-    BBTable computeDominanceFrontiers()
-    {
-        auto out_values = getAsTable();
-        out_values[this.entry] = Set(this.entry);
+        foreach (node; this.nodes[])
+        {
+            if (node == this.entry)
+                continue;
+            output[node] = this.nodes;
+        }
 
         bool changed = true;
         while (changed)
@@ -181,34 +83,20 @@ class CFG(T)
                 if (node == this.entry)
                     continue;
 
-                BBSet in_values;
-                foreach (pred; node.predecessors)
-                    in_values = in_values & out_values[pred];
+                BBSet intersection = BBSet();
+                foreach (pred; node.predecessors[])
+                    intersection = intersection & pred;
 
-                auto new_out = in_values + Set(node);
+                auto new_output = output.dup;
+                new_output[node] = Set(node) + intersection;
 
-                if (new_out != out_values[node])
+                if (output != new_output)
                 {
-                    out_values[node] = new_out;
+                    output = new_output.dup;
                     changed = true;
                 }
-
             }
         }
 
-        return out_values;
-    }
-
-    DFST computeDFST()
-    {
-        resetVisited();
-        DFST dfst = null;
-        foreach (node; this.nodes[])
-        {
-            auto tags = new Tag[];
-            node.depthFirstSearch!(x => tags ~= x.getTag());
-            dfst[node] = tags;
-        }
-        return dfst;
     }
 }
