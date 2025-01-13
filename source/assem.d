@@ -64,6 +64,66 @@ struct BinaryOp
         this.left = left;
         this.right = right;
     }
+
+    static BinaryOp newAdd(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Add, left, right);
+    }
+
+    static BinaryOp newSub(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Sub, left, right);
+    }
+
+    static BinaryOp newMul(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Mul, left, right);
+    }
+
+    static BinaryOp newDiv(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Div, left, right);
+    }
+
+    static BinaryOp newMod(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Mod, left, right);
+    }
+
+    static BinaryOp newShr(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Shr, left, right);
+    }
+
+    static BinaryOp newShl(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Shl, left, right);
+    }
+
+    static BinaryOp newAnd(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.And, left, right);
+    }
+
+    static BinaryOp newOr(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.Or, left, right);
+    }
+
+    static BinaryOp newBitAnd(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.BitAnd, left, right);
+    }
+
+    static BinaryOp newBitOr(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.BitOr, left, right);
+    }
+
+    static BinaryOp newBitXor(Operand left, Operand right)
+    {
+        return BinaryOp(Operator.BitXor, left, right);
+    }
 }
 
 struct UnaryOp
@@ -82,6 +142,21 @@ struct UnaryOp
     {
         this.operator = operator;
         this.operand = operand;
+    }
+
+    static UnaryOp newNeg(Operand operand)
+    {
+        return UnaryOp(Operator.Neg, operand);
+    }
+
+    static UnaryOp newNot(Operand operand)
+    {
+        return UnaryOp(Operator.Not, operand);
+    }
+
+    static UnaryOp newBitNot(Operand operand)
+    {
+        return UnaryOp(Operator.BitNot, operand);
     }
 }
 
@@ -111,6 +186,55 @@ struct RelOp
         this.right = right;
     }
 
+    static RelOp newEq(Operand left, Operand right)
+    {
+        return RelOp(Operator.Eq, left, right);
+    }
+
+    static RelOp newNe(Operand left, Operand right)
+    {
+        return RelOp(Operator.Ne, left, right);
+    }
+
+    static RelOp newGt(Operand left, Operand right)
+    {
+        return RelOp(Operator.Gt, left, right);
+    }
+
+    static RelOp newGe(Operand left, Operand right)
+    {
+        return RelOp(Operator.Ge, left, right);
+    }
+
+    static RelOp newLe(Operand left, Operand right)
+    {
+        return RelOp(Operator.Le, left, right);
+    }
+
+    static RelOp newLt(Operand left, Operand right)
+    {
+        return RelOp(Operator.Lt, left, right);
+    }
+
+    static RelOp newULe(Operand left, Operand right)
+    {
+        return RelOp(Operator.ULe, left, right);
+    }
+
+    static RelOp newULt(Operand left, Operand right)
+    {
+        return RelOp(Operator.ULt, left, right);
+    }
+
+    static RelOp newUGt(Operand left, Operand right)
+    {
+        return RelOp(Operator.UGt, left, right);
+    }
+
+    static RelOp newUGe(Operand left, Operand right)
+    {
+        return RelOp(Operator.UGe, left, right);
+    }
 }
 
 struct Jump
