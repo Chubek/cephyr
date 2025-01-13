@@ -4,8 +4,14 @@ import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.ran
 
 import cephyr.temporary;
 import cephyr.stack;
+import cephyr.libroutine;
+import cephyr.primitive;
 
 alias Operand = Stack!Assem;
+alias Sequence = Operand;
+alias MemSpace = size_t;
+alias Address = long;
+alias SyscallNR = int;
 
 enum Instruction
 {
@@ -28,8 +34,6 @@ enum Instruction
     BinaryOp,
     UnaryOp,
     RelOp,
-    LibCall,
-    SysCall,
     Phi,
 }
 
@@ -109,10 +113,101 @@ struct RelOp
 
 }
 
-struct Assem
+struct Jump
 {
-    alias Sequence = Operand;
+    enum DestKind
+    {
+        Label,
+        Address,
+    }
 
+    DestKind dest_kind;
+    Sequence condition;
+
+    union
+    {
+        Address v_address;
+        Label v_label;
+    }
+
+    this(Address v_address, Sequence condition = null)
+    {
+        this.dest_kind = DestKind.Address;
+        this.condition = condition;
+        this.v_address = v_address;
+    }
+
+    this(Label v_label, Sequence condition = null)
+    {
+        this.dest_kind = DestKind.Label;
+        this.condition = condition;
+        this.v_address = v_address;
+    }
+
+}
+
+struct Call
+{
+    enum Kind
+    {
+        Address,
+        Label,
+        LibraryRoutine,
+        SystemCall,
+    }
+
+    Kind kind;
+    bool is_offset;
+    Temporary[] arguments;
+
+    union
+    {
+        Address v_address;
+        Label v_label;
+        LibraryRoutine v_libroutine;
+        SyscallNR v_syscall;
+    }
+
+    this(Address v_addrress, bool is_offset = false)
+    {
+        this.kind = Kind.Address;
+        this.is_offset = is_offset;
+        this.v_address = v_address;
+    }
+
+    this(Label v_label)
+    {
+        this.kind = Kind.Label;
+        this.v_label = v_label;
+    }
+
+    this(LibraryRoutine v_libroutine)
+    {
+        this.kind = Kind.LibraryRoutine;
+        this.v_libroutine = v_libroutine;
+    }
+
+    this(SyscallNR v_syscall)
+    {
+        this.kind = Kind.SystemCall;
+        this.v_syscall = v_syscall;
+    }
+}
+
+struct Const
+{
+    Temporary temporary;
+    Primitive primitive;
+}
+
+struct MemoryMove
+{
+    Temporary temporary;
+    Primitive index;
+}
+
+class Assem
+{
     Instruction instruction;
 
     union
@@ -123,6 +218,16 @@ struct Assem
         UnaryOp v_unaryop;
         RelOp v_relop;
         Sequence v_sequence;
+        MemSpace v_memspace;
+        Jump v_jump;
+        Call v_call;
+        Const v_const;
+        MemoryMove v_memmove;
+    }
+
+    this(Instruction instruction)
+    {
+        this.instruction = instruction;
     }
 
     this(Instruction instruction, Temporary v_temporary)
@@ -159,5 +264,35 @@ struct Assem
     {
         this.instruction = instruction;
         this.v_sequence = v_sequence;
+    }
+
+    this(Instruction instruction, MemSpace v_memspace)
+    {
+        this.instruction = instruction;
+        this.v_memspace = v_memspace;
+    }
+
+    this(Instruction instruction, Jump v_jump)
+    {
+        this.instruction = instruction;
+        this.v_jump = v_jump;
+    }
+
+    this(Instruction instruction, Call v_call)
+    {
+        this.instruction = instruction;
+        this.v_call = v_call;
+    }
+
+    this(Instruction instrruction, Const v_const)
+    {
+        this.instruction = instruction;
+        this.v_const = v_const;
+    }
+
+    this(Instruction instruction, MemoryMove v_memmove)
+    {
+        this.instruction = instruction;
+        this.v_memmove = v_memmove;
     }
 }
