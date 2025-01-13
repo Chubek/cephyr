@@ -56,6 +56,13 @@ struct IEEE754
             }
         }
 
+        this(uint encoded)
+        {
+            foreach (i; 0 .. 32)
+                bits[i] = (encoded >> (31 - i)) & 1;
+            bits.reverse();
+        }
+
         float toFloat() const
         {
             if (isZero())
@@ -184,6 +191,32 @@ struct IEEE754
                     bits[i + 12] = false;
                 }
             }
+
+            Float opBinary(string op : "+")(Float rhs)
+            {
+                return Float(this.toFloat() + rhs.toFloat());
+            }
+
+            Float opBinary(string op : "-")(Float rhs)
+            {
+                return Foat(this.toFloat() - rhs.toFloat());
+            }
+
+            Float opBinary(string op : "*")(Float rhs)
+            {
+                return Float(this.toFloat() * rhs.toFloat());
+            }
+
+            Float opBinary(string op : "/")(Float rhs)
+            {
+                return Float(this.toFloat() / rhs.toFloat());
+            }
+
+            Float opBinary(string op : "^^")(Float rhs)
+            {
+                return Float(pow(this.toFloat(), rhs.toFloat()));
+            }
+
         }
 
         double toDouble() const
@@ -214,6 +247,13 @@ struct IEEE754
 
             real result = ldexp(mantissa, cast(int) exp);
             return cast(double)(sign ? -result : result);
+        }
+
+        this(ulong encoded)
+        {
+            foreach (i; 0 .. 64)
+                bits[i] = (encoded >> (63 - i)) & 1;
+            bits.reverse();
         }
 
         private void setNaN()
@@ -267,6 +307,31 @@ struct IEEE754
                 encoded <<= 1;
             }
             return encoded;
+        }
+
+        Double opBinary(string op : "+")(Double rhs)
+        {
+            return Double(this.toDouble() + rhs.toDouble());
+        }
+
+        Double opBinary(string op : "-")(Double rhs)
+        {
+            return Double(this.toDouble() - rhs.toDouble());
+        }
+
+        Double opBinary(string op : "*")(Double rhs)
+        {
+            return Double(this.toDouble() * rhs.toDouble());
+        }
+
+        Double opBinary(string op : "/")(Double rhs)
+        {
+            return Double(this.toDouble() / rhs.toDouble());
+        }
+
+        Double opBinary(string op : "^^")(Double rhs)
+        {
+            return Double(pow(this.toDouble(), rhs.toDouble()));
         }
     }
 
