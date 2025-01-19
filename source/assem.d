@@ -20,7 +20,8 @@ enum Instruction
     AllocDouble,
     AllocQuad,
     AllocN,
-    MoveMemory,
+    Assign,
+    Index,
     Call,
     Jump,
     JumpZ,
@@ -324,10 +325,17 @@ struct Const
     Primitive primitive;
 }
 
-struct MemoryMove
+struct Assign
 {
     Temporary temporary;
-    Primitive index;
+    Sequence sequence;
+}
+
+struct Index
+{
+    Temporary temporary;
+    Sequence sequence;
+    Operand index;
 }
 
 class Assem
@@ -346,7 +354,8 @@ class Assem
         Jump v_jump;
         Call v_call;
         Const v_const;
-        MemoryMove v_memmove;
+        Assign v_assign;
+        Index v_index;
     }
 
     this(Instruction instruction)
@@ -414,9 +423,48 @@ class Assem
         this.v_const = v_const;
     }
 
-    this(Instruction instruction, MemoryMove v_memmove)
+    this(Instruction instruction, Assign v_assign)
     {
         this.instruction = instruction;
-        this.v_memmove = v_memmove;
+        this.v_assign = v_assign;
+    }
+
+    this(Instruction instruction, Index v_index)
+    {
+        this.instruction = instruction;
+        this.v_index = v_index;
+    }
+
+    Label[] getDefinedVariables()
+    {
+        switch (this.instruction)
+        {
+        case Instruction.AllocByte:
+        case Instruction.AllocHalf:
+        case Instruction.AllocDouble:
+        case Instruction.AllocQuad:
+        case Instruction.AllocN:
+            return [this.v_temporary.label];
+        case Instruction.Assign:
+            return [this.v_assign.temporary.label];
+        default:
+            return [];
+        }
+    }
+
+    Label[] getUsedVariables()
+    {
+        switch (this.instruction)
+        {
+        case Instruction.Call:
+            Label[] result;
+            foreach (arg; this.v_call.arguments)
+                result ~= arg.label;
+            return result;
+        case Instruction.Index:
+            return [this.v_index.temporary.label];
+        default:
+            return [];
+        }
     }
 }
