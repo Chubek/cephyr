@@ -55,6 +55,7 @@ class Daton
     alias DatonSet = Set!Daton;
 
     Data data;
+    Label label;
     DatonSet predecessors;
     DatonSet successors;
     DatonSet gen_set;
@@ -64,14 +65,39 @@ class Daton
     DatonSet in_set;
     DatonSet out_set;
 
-    this(Data data)
+    this(Data data, Label label)
     {
         this.data = data;
+        this.label = label;
     }
 
-    this()
+    this(Label label)
     {
-        this.data = null;
+        this.label = label;
+    }
+
+    void addPredecessor(Daton daton)
+    {
+        this.predecessors ~= daton;
+    }
+
+    void addSuccessor(Daton daton)
+    {
+        this.successors ~= daton;
+    }
+
+    Nullable!Daton findNodeByLabel(Label label)
+    {
+        Nullable!Daton found;
+        auto preds_filtered = this.predecessors.filter!(x => x.label == label);
+        auto succs_filtered = this.successors.filter!(x => x.label == label);
+
+        if (preds_filtered.length > 0)
+            found = preds_filtered[0];
+        else if (succs_filtered.length > 0)
+            found = succes_filtered[0];
+
+        return found;
     }
 
     void pushAssem(Assem assem)
@@ -290,12 +316,17 @@ class DFG
         {
             foreach (assem; node.data[])
             {
-                if (auto def = assem.getDefinedVariables())
+                if (auto def_label = assem.getDefinedVariables())
                 {
-                    if (def !in node.kill_set)
-                        node.gen_set ~= def;
+                    auto def_node = node.findNodeByLabel(def_label);
 
-                    node.kill_set ~= def;
+                    if (def_node.isNull)
+                        continue;
+
+                    if (def_node.get !in node.kill_set)
+                        node.gen_set ~= def_node.get;
+
+                    node.kill_set ~= def_node.get;
 
                 }
 
@@ -309,12 +340,26 @@ class DFG
         {
             foreach (assem; node.data[])
             {
-                foreach (use; assem.getUsedVariables())
-                    if (use !in node.def_set)
-                        node.use_set ~= use;
+                foreach (use_label; assem.getUsedVariables())
+                {
+                    auto use_node = node.findNodeByLabel(use_label);
 
-                if (auto def = assem.getDefinedVariables())
-                    node.def_set ~= def;
+                    if (use_node.isNull)
+                        continue;
+
+                    if (use_node.get !in node.def_set)
+                        node.use_set ~= use_node.get;
+                }
+
+                if (auto def_label = assem.getDefinedVariables())
+                {
+                    auto def_node = node.findNodeByLabel(def_label);
+
+                    if (def_node.isNull)
+                        continue;
+
+                    node.def_set ~= def_node.get;
+                }
             }
         }
     }
