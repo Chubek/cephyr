@@ -64,6 +64,7 @@ class Daton
     DatonSet def_set;
     DatonSet in_set;
     DatonSet out_set;
+    bool is_sorted = false;
 
     this(Data data, Label label)
     {
@@ -287,6 +288,7 @@ class CFG
 class DFG
 {
     alias Nodes = Set!Daton;
+    alias Sorted = Stack!Daton;
 
     Nodes nodes;
     Nodes entry_nodes;
@@ -316,7 +318,7 @@ class DFG
         {
             foreach (assem; node.data[])
             {
-                if (auto def_label = assem.getDefinedVariables())
+                foreach (def_label; assem.getDefinedVariables())
                 {
                     auto def_node = node.findNodeByLabel(def_label);
 
@@ -351,7 +353,7 @@ class DFG
                         node.use_set ~= use_node.get;
                 }
 
-                if (auto def_label = assem.getDefinedVariables())
+                foreach (def_label; assem.getDefinedVariables())
                 {
                     auto def_node = node.findNodeByLabel(def_label);
 
@@ -391,5 +393,37 @@ class DFG
             }
         }
         while (changed);
+    }
+
+    Sorted topologicalSort()
+    {
+        Sorted sorted;
+        bool[Daton] visited;
+        bool[Daton] in_stack;
+
+        void dfsVisit(Daton node)
+        {
+            if (node in in_stack || node in visited)
+                return;
+
+            in_stack[node] = true;
+            visited[node] = true;
+
+            foreach (succ; node.successors[])
+                dfsVisit(succ);
+
+            in_stack.remove(node);
+            sorted.push(node);
+        }
+
+        foreach (entry; this.entry_nodes[])
+            if (entry !in visited)
+                dfsVisit(entry);
+
+        foreach (node; this.nodes[])
+            if (node !in visited)
+                dfsVisit(node);
+
+        return sorted;
     }
 }
