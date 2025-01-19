@@ -2,99 +2,75 @@ module cephyr.temporary;
 
 import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.conv;
 
-struct Temporary
+import cephyr.stack;
+
+alias Label = string;
+
+class TemporaryManager
 {
-    enum Kind
+    static size_t counter;
+    bool[Label] active_temps;
+    Stack!Label free_list;
+
+    static struct TemporaryInfo
     {
-        InFrame,
-        InRegister,
-        InBinary,
+        string purpose;
+        size_t scope_level;
+        bool is_ssa;
     }
 
-    size_t offset;
-    size_t size;
-    static size_t offset_counter;
+    TemporaryInfo[Label] temp_info;
 
-    this(Kind kind, size_t size)
+    Label createTemporary(string purpose = "", bool is_ssa = false)
     {
-        this.kind = kind;
-        this.size = size;
-        this.offset = this.offset_counter;
-        this.offset_counter += size;
+        import std.format : format;
+
+        Label name;
+        if (!this.free_list.isEmpty())
+            name = this.free_list.pop();
+        else
+            name = format("t%d", this.counter++);
+
+        this.active_temps[name] = true;
+        this.temp_info[name] = TemporaryInfo(purpose, getCurrentScopeLevel(), is_ssa);
+
+        return name;
     }
 
-    void resetOffsetCounter()
+    Label createSSATemporary(Label base_temp, size_t label_version)
     {
-        this.offset_counter = 0;
+        import std.format : format;
+
+        Label name = format("%s_%d", base_temp, label_version);
+        this.active_temps[name] = true;
+        this.temp_info[name] = TemporaryInfo("ssa_label_version", getCurrentScopeLevel(), true);
+        return name;
     }
 
-    static Temporary newInFrame(size_t size)
+    void releaseTemporary(Label temp)
     {
-        return Temporary(Kind.InFrame, size);
+        if (temp in this.active_temps)
+        {
+            this.active_temps.remove(temp);
+            this.free_list.push(temp);
+        }
     }
 
-    static Temporary newInRegister(size_t size)
+    bool isTemporary(Label name) const
     {
-        return Temporary(Kind.InRegister, size);
+        return (name in this.active_temps) !is null;
     }
 
-    static Temporary newInBinary(size_t size)
+    bool isSSA(Label temp) const
     {
-        return Temporary(Kind.InBinary, size);
-    }
-}
-
-struct Label
-{
-    enum MAX_LOCAL = 9;
-    enum MAX_MANGLED = 12;
-
-    enum Kind
-    {
-        Local,
-        Global,
-        Mangled,
+        if (auto info = temp in this.temp_info)
+            return info.is_ssa;
+        return false;
     }
 
-    Kind kind;
-    string name;
-    static int local_num;
-
-    this(Kind kind, string name)
+    size_t getCurrentScopeLevel() const
     {
-        this.kind = kind;
-        this.name = name;
+        // TODO
     }
 
-    void resetLocalNum()
-    {
-        this.local_num = 0;
-    }
-
-    static Label newLocal()
-    {
-        if (this.local_num == MAX_LOCAL)
-            this.local_num = 0;
-        return Label(Kind.Local, (this.local_num++).to!string);
-    }
-
-    static Label newGlobal(string name)
-    {
-        return Label(Kind.Global, name);
-    }
-
-    static Label newMangled()
-    {
-        return Label(Kind.Mangled, generateRandomString());
-    }
-
-}
-
-string generateRandomString(size_t length)
-{
-    import std.random, std.range;
-
-    enum charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    auto rng = Random();
-    return iota(0, length).map!(_ => charset[uniform(0, charset.length, rng)]).array;
 }
