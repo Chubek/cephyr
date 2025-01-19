@@ -395,7 +395,7 @@ class DFG
         while (changed);
     }
 
-    Sorted topologicalSort()
+    Sorted topologicalSortForwards()
     {
         Sorted sorted;
         bool[Daton] visited;
@@ -426,4 +426,37 @@ class DFG
 
         return sorted;
     }
+
+    Sorted topologicalSortBackwards()
+    {
+        Sorted sorted;
+        bool[Daton] visited;
+        bool[Daton] in_stack;
+
+        void dfsVisit(Daton node)
+        {
+            if (node in in_stack || node in visited)
+                return;
+
+            in_stack[node] = true;
+            visited[node] = true;
+
+            foreach (pred; node.predecessors[])
+                dfsVisit(pred);
+
+            in_stack.remove(node);
+            sorted.push(node);
+        }
+
+        foreach (exit; this.exit_nodes[])
+            if (exit !in visited)
+                dfsVisit(exit);
+
+        foreach (node; this.nodes[])
+            if (node !in visited)
+                dfsVisit(node);
+
+        return sorted;
+    }
+
 }
