@@ -74,11 +74,7 @@ class Set(T)
 
     bool hasItem(T item)
     {
-        foreach (elt; this.container[])
-            if (elt == item)
-                return true;
-        return false;
-
+        return this.container.canFind(item);
     }
 
     Set!T unionWith(Set!T other)
