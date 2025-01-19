@@ -1,4 +1,4 @@
-module cephyr.cfg;
+module cephyr.flow;
 
 import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.range, std.conv;
 
@@ -51,24 +51,38 @@ class BasicBlock
 
 class Daton
 {
-    Assem data;
-    int id;
-    static int id_counter;
+    alias Data = Stack!Assem;
+    alias DatonSet = Set!Daton;
 
-    this(Assem data)
+    Data data;
+    DatonSet predecessors;
+    DatonSet successors;
+    DatonSet gen_set;
+    DatonSet kill_set;
+    DatonSet use_set;
+    DatonSet def_set;
+    DatonSet in_set;
+    DatonSet out_set;
+
+    this(Data data)
     {
         this.data = data;
-        this.id = this.id_counter++;
     }
 
-    size_t toHash()
+    this()
     {
-        size_t hash = DJB2_INIT;
-        foreach (chr; this.id.to!string)
-            hash = (hash << 5) + hash + chr;
-        return hash;
+        this.data = null;
     }
 
+    void pushAssem(Assem assem)
+    {
+        this.assem.push(assem);
+    }
+
+    Assem popAssem()
+    {
+        return this.assem.pop();
+    }
 }
 
 class CFG
@@ -246,17 +260,91 @@ class CFG
 
 class DFG
 {
-    alias DatonEdge = Tuple!(Daton, "from", Daton, "to");
-    alias Edges = Set!DatonEdge;
     alias Nodes = Set!Daton;
 
     Nodes nodes;
-    Edges edges;
+    Nodes entry_nodes;
+    Nodes exit_nodes;
 
     void addEdge(Daton from, Daton to)
     {
-	this.nodes ~= from;
-	this.nodes ~= to;
-	this.edges ~= tuple!("from", "to")(from, to);
+        from.addSuccessor(to);
+        to.addPredecessor(from);
+        this.nodes ~= from;
+        this.nodes ~= to;
+    }
+
+    void markAsEntry(Daton daton)
+    {
+        this.entry_nodes ~= daton;
+    }
+
+    void markAsExit(Daton daton)
+    {
+        this.exit_nodes ~= daton;
+    }
+
+    void computeGenKillSets()
+    {
+        foreach (node; this.nodes[])
+        {
+            foreach (assem; node.data[])
+            {
+                if (auto def = assem.getDefinedVariables())
+                {
+                    if (def !in node.kill_set)
+                        node.gen_set ~= def;
+
+                    node.kill_set ~= def;
+
+                }
+
+            }
+        }
+    }
+
+    void computeDefUseSets()
+    {
+        foreach (node; this.nodes[])
+        {
+            foreach (assem; node.data[])
+            {
+                foreach (use; assem.getUsedVariables())
+                    if (use !in node.def_set)
+                        node.use_set ~= use;
+
+                if (auto def = assem.getDefinedVariables())
+                    node.def_set ~= def;
+            }
+        }
+    }
+
+    void computeInOutSets()
+    {
+        bool changed = true;
+
+        do
+        {
+            changed = false;
+
+            foreach (node; this.nodes[])
+            {
+                auto old_in = node.in_set.dup;
+                auto old_out = node.out_set.dup;
+
+                node.out_set = Set();
+                foreach (succ; node.successors[])
+                    node.out_set = node.out_set + succ.in_set;
+
+                node.in_set = Set();
+                foreach (v; node.out_set[])
+                    if (v !in node.kill_set)
+                        node.in_set ~= v;
+
+                if (old_in != node.in_set || old_out != node.out_set)
+                    changed = true;
+            }
+        }
+        while (changed);
     }
 }
