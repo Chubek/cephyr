@@ -12,9 +12,10 @@ struct FlowNode
 {
     alias FlowNodeSet = Set!(FlowNode*);
     alias LabelSet = Set!Label;
+    alias Data = Stack!IRInstruction;
 
     Label label;
-    IRInstruction data;
+    Data data;
     FlowNodeSet predecessors;
     FlowNodeSet successors;
     LabelSet gen_set;
@@ -24,7 +25,7 @@ struct FlowNode
     LabelSet[Label] use_def_chain;
     LabelSet[Label] def_use_chain;
 
-    this(Label label, IRInstruction data)
+    this(Label label, Data data)
     {
         this.label = label;
         this.data = data;
@@ -188,5 +189,51 @@ class FlowGraph
 
         dfsVisit(this.entry_node);
         return sorted;
+    }
+
+    void computeGenKillSets()
+    {
+        foreach (node; this.nodes[])
+        {
+            bool[Label] defined = false;
+            foreach (instr; node.data[])
+            {
+                foreach (def; instr.getDefinedVariables())
+                {
+                    if (defined[def])
+                        node.kill_set ~= def;
+
+                    defined[def] = true;
+                    node.gen_set ~= def;
+                }
+
+            }
+        }
+    }
+
+    void computeInOutSets()
+    {
+        bool changed;
+
+        do
+        {
+            changed = false;
+
+            foreach (node; this.nodes[])
+            {
+                auto old_in = node.in_set.dup;
+                auto old_out = node.out_set.dup;
+
+                node.out_set = Set();
+                foreach (succ; node.successors[])
+                    node.out_set = node.out_set + succ.in_set;
+
+                node.in_set = node.gen_set.dup + (node.out_set - node.kill_set);
+
+                if (old_in != node.in_set || old_out != node.out_set)
+                    changed = true;
+            }
+        }
+        while (changed);
     }
 }
