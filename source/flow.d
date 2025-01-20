@@ -5,257 +5,137 @@ import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.ran
 import cephyr.set;
 import cephyr.stack;
 import cephyr.queue;
-import cephyr.assem;
+import cephyr.inter;
+import cephyr.temporary;
 
-enum DJB2_INIT = 5381;
-
-class BasicBlock
+struct FlowNode
 {
-    Set!BasicBlock predecessors;
-    Set!BasicBlock successors;
-    Assem data;
-    int id;
-    bool is_terminal;
-    static int id_counter;
+    alias FlowNodeSet = Set!(FlowNode*);
+    alias LabelSet = Set!Label;
 
-    this(Assem data, bool is_terminal = false)
-    {
-        this.data = data;
-        this.id = this.id_counter++;
-        this.is_terminal = is_terminal;
-    }
-
-    void addPredecessor(BasicBlock block)
-    {
-        this.predecessors ~= block;
-    }
-
-    void addSuccessor(BasicBlock block)
-    {
-        this.successors ~= block;
-    }
-
-    bool opEquals(const BasicBlock rhs) const
-    {
-        return this.id == rhs.id;
-    }
-
-    size_t toHash()
-    {
-        size_t hash = DJB2_INIT;
-        foreach (chr; this.id.to!string)
-            hash = (hash << 5) + hash + chr;
-        return hash;
-    }
-}
-
-class Daton
-{
-    alias Data = Stack!Assem;
-    alias DatonSet = Set!Daton;
-
-    Data data;
     Label label;
-    DatonSet predecessors;
-    DatonSet successors;
-    DatonSet gen_set;
-    DatonSet kill_set;
-    DatonSet use_set;
-    DatonSet def_set;
-    DatonSet in_set;
-    DatonSet out_set;
-    bool is_sorted = false;
+    IRInstruction data;
+    FlowNodeSet predecessors;
+    FlowNodeSet successors;
+    LabelSet gen_set;
+    LabelSet kill_set;
+    LabelSet in_set;
+    LabelSet out_set;
+    LabelSet[Label] use_def_chain;
+    LabelSet[Label] def_use_chain;
 
-    this(Data data, Label label)
+    this(Label label, IRInstruction data)
     {
+        this.label = label;
         this.data = data;
-        this.label = label;
     }
 
-    this(Label label)
+    void addPredecessor(FlowNode* node)
     {
-        this.label = label;
+        this.predecessors ~= node;
     }
 
-    void addPredecessor(Daton daton)
+    void addSuccessor(FlowNode* node)
     {
-        this.predecessors ~= daton;
+        this.successor ~= node;
     }
 
-    void addSuccessor(Daton daton)
+    void addToGenSet(Label label)
     {
-        this.successors ~= daton;
+        this.gen_set ~= label;
     }
 
-    Nullable!Daton findNodeByLabel(Label label)
+    void addToKillSet(Label label)
     {
-        Nullable!Daton found;
-        auto preds_filtered = this.predecessors.filter!(x => x.label == label);
-        auto succs_filtered = this.successors.filter!(x => x.label == label);
-
-        if (preds_filtered.length > 0)
-            found = preds_filtered[0];
-        else if (succs_filtered.length > 0)
-            found = succes_filtered[0];
-
-        return found;
+        this.kill_set ~= label;
     }
 
-    void pushAssem(Assem assem)
+    void addToInSet(Label label)
     {
-        this.assem.push(assem);
+        this.in_set ~= label;
     }
 
-    Assem popAssem()
+    void addToOutSet(Label label)
     {
-        return this.assem.pop();
+        this.out_set ~= label;
+    }
+
+    void addToDefUseChain(Label subject, Label label)
+    {
+        this.def_use_chain[subject] ~= label;
+    }
+
+    void addToUseDefChain(Label subject, Label label)
+    {
+        this.use_def_chain[subject] ~= label;
     }
 }
 
-class CFG
+class FlowGraph
 {
-    alias BBlockEdge = Tuple!(BasicBlock, "from", BasicBlock, "to");
-    alias BBSet = Set!BasicBlock;
-    alias Edges = Set!BBlockEdge;
-    alias Dominators = BBSet[BasicBlock];
-    alias IDoms = BasicBlock[BasicBlock];
+    alias Nodes = Set!FlowNode;
+    alias Edges = Nodes[FlowNode];
+    alias Dominators = Node[FlowNode];
+    alias IDoms = FlowNode[FlowNode];
+    alias Sorted = Set!FlowNode*;
 
-    BasicBlock entry;
-    BasicBlock exit;
-    BBSet nodes;
+    Nodes nodes;
     Edges edges;
+    FlowNode* entry_node;
+    FlowNode* exit_node;
 
-    this(Assem entry, Assem exit)
-    {
-        this.entry = new BasicBlock(entry);
-        this.exit = new BasicBlock(exit, true);
-        this.nodes ~= this.entry;
-        this.nodes ~= this.exit;
-        addEdge(this.entry, this.exit);
-    }
-
-    void addEdge(BasicBlock from, BasicBlock to)
+    void addEdge(FlowNode from, FlowNode to)
     {
         from.addSuccessor(to);
         to.addPredecessor(from);
         this.nodes ~= from;
         this.nodes ~= to;
-        this.edges ~= tuple!("from", "to")(from, to);
+        this.edges[from] ~= to;
+    }
+
+    void markAsEntry(FlowNode* node)
+    {
+        this.entry_node = node;
+    }
+
+    void markAsExit(FlowNode* node)
+    {
+        this.exit_node = node;
     }
 
     Dominators computeDominators()
     {
         Dominators output = null;
-        output[this.entry] = Set(this.entry);
+        output[this.entry_node] = Set(this.entry_node);
 
         foreach (node; this.nodes[])
         {
-            if (node == this.entry)
+            if (node == this.entry_node)
                 continue;
-            output[node] = this.nodes;
+            output[node] = this.nodes.dup;
         }
 
         bool changed = true;
         while (changed)
         {
             changed = false;
-
             foreach (node; this.nodes[])
             {
-                if (node == this.entry)
+                if (node == this.entry_node)
                     continue;
 
-                BBSet intersection = this.nodes.dup;
+                auto new_output = output[node].dup;
                 foreach (pred; node.predecessors[])
-                    intersection = intersection & output[pred];
-
-                intersection ~= node;
-
-                if (output[node] != intersection)
                 {
-                    output[node] = intersection;
+                    new_output = new_output & output[pred];
+                }
+
+                new_output ~= node;
+
+                if (new_output != output[node])
+                {
+                    output[node] = new_output;
                     changed = true;
-                }
-            }
-        }
-
-    }
-
-    Dominators computePostDominators()
-    {
-        Dominators output = null;
-        output[this.entry] = Set(this.entry);
-
-        foreach (node; this.nodes[])
-        {
-            if (node == this.entry)
-                continue;
-            output[node] = this.nodes;
-        }
-
-        bool changed = true;
-        while (changed)
-        {
-            changed = false;
-
-            foreach (node; this.nodes[])
-            {
-                if (node == this.entry)
-                    continue;
-
-                BBSet intersection = this.nodes.dup;
-                foreach (succ; node.successors[])
-                    intersection = intersection & output[succ];
-
-                intersection ~= node;
-
-                if (output[node] != intersection)
-                {
-                    output[node] = intersection;
-                    changed = true;
-                }
-            }
-        }
-
-    }
-
-    Dominators computeDominanceFrontiers(Dominators dominators)
-    {
-        Dominators output = null;
-        foreach (node; this.nodes[])
-            output[node] = BBSet();
-
-        foreach (node; this.nodes[])
-        {
-            foreach (succ; node.successors[])
-            {
-                auto runner = dominators[succ];
-                while (runner != dominators[node])
-                {
-                    output[runner] ~= node;
-                    runner = dominators[runner];
-                }
-            }
-        }
-
-        return output;
-    }
-
-    Dominators computePostDominanceFrontiers(Dominators post_dominators)
-    {
-        Dominators output = null;
-        foreach (node; this.nodes[])
-            output[node] = BBSet();
-
-        foreach (node; this.nodes[])
-        {
-            foreach (pred; node.predecessors[])
-            {
-                auto runner = post_dominators[pred];
-                while (runner != post_dominators[node])
-                {
-                    output[runner] ~= node;
-                    runner = post_dominators[runner];
                 }
             }
         }
@@ -269,139 +149,29 @@ class CFG
 
         foreach (node; this.nodes[])
         {
-            BasicBlock idom = null;
-            foreach (dom; dominators[node][])
+            if (node == this.entry_point || node in idoms)
+                continue;
+
+            foreach (discrim_node; this.nodes[])
             {
-                if (dom != node)
+                if (discrim_node != node && discrim_node !in idoms && discrim_node in dominators[node])
                 {
-                    if (!idom || dominators[dom].getLength() > dominators[idom].getLength())
-                        idom = dom;
+                    idoms[node] = discrim_node;
+                    break;
                 }
-                idoms[dom] = idom;
             }
         }
 
         return idoms;
     }
-}
 
-class DFG
-{
-    alias Nodes = Set!Daton;
-    alias Sorted = Stack!Daton;
-
-    Nodes nodes;
-    Nodes entry_nodes;
-    Nodes exit_nodes;
-
-    void addEdge(Daton from, Daton to)
-    {
-        from.addSuccessor(to);
-        to.addPredecessor(from);
-        this.nodes ~= from;
-        this.nodes ~= to;
-    }
-
-    void markAsEntry(Daton daton)
-    {
-        this.entry_nodes ~= daton;
-    }
-
-    void markAsExit(Daton daton)
-    {
-        this.exit_nodes ~= daton;
-    }
-
-    void computeGenKillSets()
-    {
-        foreach (node; this.nodes[])
-        {
-            foreach (assem; node.data[])
-            {
-                foreach (def_label; assem.getDefinedVariables())
-                {
-                    auto def_node = node.findNodeByLabel(def_label);
-
-                    if (def_node.isNull)
-                        continue;
-
-                    if (def_node.get !in node.kill_set)
-                        node.gen_set ~= def_node.get;
-
-                    node.kill_set ~= def_node.get;
-
-                }
-
-            }
-        }
-    }
-
-    void computeDefUseSets()
-    {
-        foreach (node; this.nodes[])
-        {
-            foreach (assem; node.data[])
-            {
-                foreach (use_label; assem.getUsedVariables())
-                {
-                    auto use_node = node.findNodeByLabel(use_label);
-
-                    if (use_node.isNull)
-                        continue;
-
-                    if (use_node.get !in node.def_set)
-                        node.use_set ~= use_node.get;
-                }
-
-                foreach (def_label; assem.getDefinedVariables())
-                {
-                    auto def_node = node.findNodeByLabel(def_label);
-
-                    if (def_node.isNull)
-                        continue;
-
-                    node.def_set ~= def_node.get;
-                }
-            }
-        }
-    }
-
-    void computeInOutSets()
-    {
-        bool changed = true;
-
-        do
-        {
-            changed = false;
-
-            foreach (node; this.nodes[])
-            {
-                auto old_in = node.in_set.dup;
-                auto old_out = node.out_set.dup;
-
-                node.out_set = Set();
-                foreach (succ; node.successors[])
-                    node.out_set = node.out_set + succ.in_set;
-
-                node.in_set = Set();
-                foreach (v; node.out_set[])
-                    if (v !in node.kill_set)
-                        node.in_set ~= v;
-
-                if (old_in != node.in_set || old_out != node.out_set)
-                    changed = true;
-            }
-        }
-        while (changed);
-    }
-
-    Sorted topologicalSortForwards()
+    Sorted topologicalSort()
     {
         Sorted sorted;
-        bool[Daton] visited;
-        bool[Daton] in_stack;
+        bool[FlowNode* ] in_stack = false;
+        bool[FlowNode* ] visited = false;
 
-        void dfsVisit(Daton node)
+        void dfsVisit(FlowNode* node)
         {
             if (node in in_stack || node in visited)
                 return;
@@ -413,50 +183,10 @@ class DFG
                 dfsVisit(succ);
 
             in_stack.remove(node);
-            sorted.push(node);
+            sorted ~= node;
         }
 
-        foreach (entry; this.entry_nodes[])
-            if (entry !in visited)
-                dfsVisit(entry);
-
-        foreach (node; this.nodes[])
-            if (node !in visited)
-                dfsVisit(node);
-
+        dfsVisit(this.entry_point);
         return sorted;
     }
-
-    Sorted topologicalSortBackwards()
-    {
-        Sorted sorted;
-        bool[Daton] visited;
-        bool[Daton] in_stack;
-
-        void dfsVisit(Daton node)
-        {
-            if (node in in_stack || node in visited)
-                return;
-
-            in_stack[node] = true;
-            visited[node] = true;
-
-            foreach (pred; node.predecessors[])
-                dfsVisit(pred);
-
-            in_stack.remove(node);
-            sorted.push(node);
-        }
-
-        foreach (exit; this.exit_nodes[])
-            if (exit !in visited)
-                dfsVisit(exit);
-
-        foreach (node; this.nodes[])
-            if (node !in visited)
-                dfsVisit(node);
-
-        return sorted;
-    }
-
 }
