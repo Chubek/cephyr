@@ -149,7 +149,7 @@ class FlowGraph
 
         foreach (node; this.nodes[])
         {
-            if (node == this.entry_point || node in idoms)
+            if (node == this.entry_node || node in idoms)
                 continue;
 
             foreach (discrim_node; this.nodes[])
@@ -186,7 +186,7 @@ class FlowGraph
             sorted ~= node;
         }
 
-        dfsVisit(this.entry_point);
+        dfsVisit(this.entry_node);
         return sorted;
     }
 }
