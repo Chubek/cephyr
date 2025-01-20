@@ -1,4 +1,4 @@
-module cephyr.assem;
+module cephyr.inter;
 
 import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.range;
 
@@ -61,8 +61,7 @@ class IRInstruction
     size_t size;
 
     bool defines_value;
-    bool[] srcs_is_use;
-    bool is_define;
+    bool[] srcs_in_use;
 
     this(OpCode op, Label dst = null, Label[] srcs, Label label = null)
     {
