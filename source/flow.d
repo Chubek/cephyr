@@ -16,6 +16,8 @@ class FlowNode
     IRInstruction instr;
     FlowNodeSet predecessors;
     FlowNodeSet successors;
+    FlowNodeSet generates;
+    FlowNodeSet kills;
 
     this(Label label, IRInstruction instr)
     {
@@ -40,6 +42,7 @@ class FlowGraph
     alias Edges = Nodes[FlowNode];
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
+    alias Exprs = Nodes[FlowNode];
 
     Nodes nodes;
     Edges edges;
@@ -105,7 +108,7 @@ class FlowGraph
         return output;
     }
 
-    IDoms computeImmediateDominators(Dominators dominators)
+    IDoms computeIDoms(Dominators dominators)
     {
         IDoms idoms = null;
 
@@ -177,4 +180,91 @@ class FlowGraph
         this.nodes = sorted;
     }
 
+    void computeGenKillSets()
+    {
+        foreach (node; this.nodes[])
+        {
+            bool[Label] defined = false;
+            foreach (def; node.instr.getDefinedVariables())
+            {
+                if (defined[def])
+                    node.killed ~= node;
+
+                defined[def] = true;
+                node.generated ~= node;
+            }
+        }
+    }
+
+    Exprs computeAvailableExprs()
+    {
+        Exprs output = null;
+
+        foreach (node; this.nodes[])
+        {
+            if (node == this.entry_node)
+                continue;
+            output[node] = this.nodes.dup;
+        }
+
+        bool changed = true;
+
+        while (changed)
+        {
+            changed = false;
+            foreach (node; this.nodes[])
+            {
+                if (node == this.entry_node)
+                    continue;
+
+                auto old_out = output[node].dup;
+
+                Nodes input;
+                foreach (pred; node.predecessors[])
+                    input = input & output[pred];
+
+                output[node] = node.generates + (input - node.kills);
+
+                if (output[node] != old_out)
+                    changed = true;
+            }
+        }
+
+        return output;
+    }
+
+    Exprs computeReachingExprs()
+    {
+        Exprs output = null;
+        Exprs input = null;
+
+        foreach (node; this.nodes[])
+        {
+            if (node == this.entry_node)
+                continue;
+            input[node] = Set();
+            output[node] = this.nodes.dup;
+        }
+
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (node; this.nodes[])
+            {
+                auto old_out = output[node].dup;
+
+                input[node] = node.generates + (old_out - node.kills);
+
+                foreach (succ; node.successors[])
+                    output[node] = output[node] + input[succ];
+
+                if (output[node] != old_out)
+                    changed = true;
+
+            }
+        }
+
+        return output;
+    }
 }
