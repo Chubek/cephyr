@@ -79,17 +79,11 @@ class FlowGraph
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
     alias Sorted = Set!FlowNode;
-    alias AvailExpr = Stack!IRInstruction[FlowNode];
-    alias ReachingExpr = Stack!Label[Label];
-    alias Liveness = Stack!Label[FlowNode];
 
     Nodes nodes;
     Edges edges;
     FlowNode* entry_node;
     FlowNode* exit_node;
-    AvailExpr availble_expressions;
-    ReachingExpr reaching_expressions;
-    Liveness liveness;
 
     void addEdge(FlowNode from, FlowNode to)
     {
@@ -222,57 +216,4 @@ class FlowGraph
         this.nodes = sorted;
     }
 
-    void computeAvailbleExpressions()
-    {
-        foreach (node; this.nodes[])
-        {
-            bool[Label] redefined = false;
-            foreach (instr; node.data[])
-            {
-                if (!instr.defines_value)
-                    continue;
-
-                foreach (def; instr.getDefinedVariables())
-                {
-                    if (!redefined[def])
-                        available_expressions[node].push(instr);
-
-                    redefined[def] = true;
-                }
-            }
-        }
-    }
-
-    void computeReachingDefinitions()
-    {
-        foreach (node; this.nodes[])
-        {
-            bool[Label] recomputed = false;
-            foreach (instr; node.data[])
-            {
-                if (!instr.defines_value || recomputed[instr.label])
-                    continue;
-
-                foreach (def; instr.getDefinedVariables())
-                    reaching_expressions[instr.label].push(def);
-
-                recomputed[instr.label] = true;
-            }
-        }
-    }
-
-    void computeLiveness()
-    {
-        foreach (node; this.nodes[])
-        {
-            foreach (instr; node.data[])
-            {
-                if (!node.defines_value)
-                    continue;
-
-                foreach (def; instr.getDefinedVariables())
-                    liveness[node].push(def);
-            }
-        }
-    }
 }
