@@ -8,67 +8,29 @@ import cephyr.queue;
 import cephyr.inter;
 import cephyr.temporary;
 
-struct FlowNode
+class FlowNode
 {
-    alias FlowNodeSet = Set!(FlowNode*);
-    alias LabelSet = Set!Label;
-    alias Data = Stack!IRInstruction;
+    alias FlowNodeSet = Set!FlowNode;
 
     Label label;
-    Data data;
+    IRInstruction instr;
     FlowNodeSet predecessors;
     FlowNodeSet successors;
-    LabelSet gen_set;
-    LabelSet kill_set;
-    LabelSet in_set;
-    LabelSet out_set;
-    LabelSet use_set;
-    LabelSet def_set;
 
-    this(Label label, Data data)
+    this(Label label, IRInstruction instr)
     {
         this.label = label;
-        this.data = data;
+        this.instr = instr;
     }
 
-    void addPredecessor(FlowNode* node)
+    void addPredecessor(FlowNode node)
     {
         this.predecessors ~= node;
     }
 
-    void addSuccessor(FlowNode* node)
+    void addSuccessor(FlowNode node)
     {
         this.successor ~= node;
-    }
-
-    void addToGenSet(Label label)
-    {
-        this.gen_set ~= label;
-    }
-
-    void addToKillSet(Label label)
-    {
-        this.kill_set ~= label;
-    }
-
-    void addToInSet(Label label)
-    {
-        this.in_set ~= label;
-    }
-
-    void addToOutSet(Label label)
-    {
-        this.out_set ~= label;
-    }
-
-    void addToDefUseChain(Label subject, Label label)
-    {
-        this.def_use_chain[subject] ~= label;
-    }
-
-    void addToUseDefChain(Label subject, Label label)
-    {
-        this.use_def_chain[subject] ~= label;
     }
 }
 
@@ -78,12 +40,11 @@ class FlowGraph
     alias Edges = Nodes[FlowNode];
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
-    alias Sorted = Set!FlowNode;
 
     Nodes nodes;
     Edges edges;
-    FlowNode* entry_node;
-    FlowNode* exit_node;
+    FlowNode entry_node;
+    FlowNode exit_node;
 
     void addEdge(FlowNode from, FlowNode to)
     {
@@ -94,12 +55,12 @@ class FlowGraph
         this.edges[from] ~= to;
     }
 
-    void markAsEntry(FlowNode* node)
+    void markAsEntry(FlowNode node)
     {
         this.entry_node = node;
     }
 
-    void markAsExit(FlowNode* node)
+    void markAsExit(FlowNode node)
     {
         this.exit_node = node;
     }
@@ -168,11 +129,11 @@ class FlowGraph
 
     void topologicalSortForwards()
     {
-        Sorted sorted;
-        bool[FlowNode* ] in_stack = false;
-        bool[FlowNode* ] visited = false;
+        Nodes sorted;
+        bool[FlowNode] in_stack = false;
+        bool[FlowNode] visited = false;
 
-        void dfsVisit(FlowNode* node)
+        void dfsVisit(FlowNode node)
         {
             if (node in in_stack || node in visited)
                 return;
@@ -181,23 +142,23 @@ class FlowGraph
             visited[node] = true;
 
             foreach (succ; node.successors[])
-                dfsVisit(&succ);
+                dfsVisit(succ);
 
             in_stack.remove(node);
             sorted ~= *node;
         }
 
-        dfsVisit(&this.entry_node);
+        dfsVisit(this.entry_node);
         this.nodes = sorted;
     }
 
     void topologicalSortBackwards()
     {
-        Sorted sorted;
-        bool[FlowNode* ] in_stack = false;
-        bool[FlowNode* ] visited = false;
+        Nodes sorted;
+        bool[FlowNode] in_stack = false;
+        bool[FlowNode] visited = false;
 
-        void dfsVisit(FlowNode* node)
+        void dfsVisit(FlowNode node)
         {
             if (node in in_stack || node in visited)
                 return;
@@ -206,13 +167,13 @@ class FlowGraph
             visited[node] = true;
 
             foreach (pred; node.predecessors[])
-                dfsVisit(&pred);
+                dfsVisit(pred);
 
             in_stack.remove(node);
             sorted ~= *node;
         }
 
-        dfsVisit(&this.exit_node);
+        dfsVisit(this.exit_node);
         this.nodes = sorted;
     }
 
