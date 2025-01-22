@@ -22,8 +22,8 @@ struct FlowNode
     LabelSet kill_set;
     LabelSet in_set;
     LabelSet out_set;
-    LabelSet[Label] use_def_chain;
-    LabelSet[Label] def_use_chain;
+    LabelSet use_set;
+    LabelSet def_set;
 
     this(Label label, Data data)
     {
@@ -76,14 +76,20 @@ class FlowGraph
 {
     alias Nodes = Set!FlowNode;
     alias Edges = Nodes[FlowNode];
-    alias Dominators = Node[FlowNode];
+    alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
-    alias Sorted = Set!FlowNode*;
+    alias Sorted = Set!FlowNode;
+    alias AvailExpr = Stack!IRInstruction[FlowNode];
+    alias ReachingExpr = Stack!Label[Label];
+    alias Liveness = Stack!Label[FlowNode];
 
     Nodes nodes;
     Edges edges;
     FlowNode* entry_node;
     FlowNode* exit_node;
+    AvailExpr availble_expressions;
+    ReachingExpr reaching_expressions;
+    Liveness liveness;
 
     void addEdge(FlowNode from, FlowNode to)
     {
@@ -166,7 +172,7 @@ class FlowGraph
         return idoms;
     }
 
-    Sorted topologicalSort()
+    void topologicalSortForwards()
     {
         Sorted sorted;
         bool[FlowNode* ] in_stack = false;
@@ -181,59 +187,92 @@ class FlowGraph
             visited[node] = true;
 
             foreach (succ; node.successors[])
-                dfsVisit(succ);
+                dfsVisit(&succ);
 
             in_stack.remove(node);
-            sorted ~= node;
+            sorted ~= *node;
         }
 
-        dfsVisit(this.entry_node);
-        return sorted;
+        dfsVisit(&this.entry_node);
+        this.nodes = sorted;
     }
 
-    void computeGenKillSets()
+    void topologicalSortBackwards()
+    {
+        Sorted sorted;
+        bool[FlowNode* ] in_stack = false;
+        bool[FlowNode* ] visited = false;
+
+        void dfsVisit(FlowNode* node)
+        {
+            if (node in in_stack || node in visited)
+                return;
+
+            in_stack[node] = true;
+            visited[node] = true;
+
+            foreach (pred; node.predecessors[])
+                dfsVisit(&pred);
+
+            in_stack.remove(node);
+            sorted ~= *node;
+        }
+
+        dfsVisit(&this.exit_node);
+        this.nodes = sorted;
+    }
+
+    void computeAvailbleExpressions()
     {
         foreach (node; this.nodes[])
         {
-            bool[Label] defined = false;
+            bool[Label] redefined = false;
             foreach (instr; node.data[])
             {
+                if (!instr.defines_value)
+                    continue;
+
                 foreach (def; instr.getDefinedVariables())
                 {
-                    if (defined[def])
-                        node.kill_set ~= def;
+                    if (!redefined[def])
+                        available_expressions[node].push(instr);
 
-                    defined[def] = true;
-                    node.gen_set ~= def;
+                    redefined[def] = true;
                 }
-
             }
         }
     }
 
-    void computeInOutSets()
+    void computeReachingDefinitions()
     {
-        bool changed;
-
-        do
+        foreach (node; this.nodes[])
         {
-            changed = false;
-
-            foreach (node; this.nodes[])
+            bool[Label] recomputed = false;
+            foreach (instr; node.data[])
             {
-                auto old_in = node.in_set.dup;
-                auto old_out = node.out_set.dup;
+                if (!instr.defines_value || recomputed[instr.label])
+                    continue;
 
-                node.out_set = Set();
-                foreach (succ; node.successors[])
-                    node.out_set = node.out_set + succ.in_set;
+                foreach (def; instr.getDefinedVariables())
+                    reaching_expressions[instr.label].push(def);
 
-                node.in_set = node.gen_set.dup + (node.out_set - node.kill_set);
-
-                if (old_in != node.in_set || old_out != node.out_set)
-                    changed = true;
+                recomputed[instr.label] = true;
             }
         }
-        while (changed);
+    }
+
+    void computeLiveness()
+    {
+        foreach (node; this.nodes[])
+        {
+            foreach (instr; node.data[])
+            {
+                if (!node.defines_value)
+                    continue;
+
+                foreach (def; instr.getDefinedVariables())
+                    liveness[node].push(def);
+            }
+        }
     }
 }
