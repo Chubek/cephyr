@@ -298,5 +298,6 @@ class FlowGraph
             }
         }
 
+	return interf;
     }
 }
