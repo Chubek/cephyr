@@ -199,13 +199,13 @@ class FlowGraph
     Exprs computeAvailableExprs()
     {
         Exprs output = null;
-	Exprs input = null;
+        Exprs input = null;
 
         foreach (node; this.nodes[])
         {
             if (node == this.entry_node)
                 continue;
-	    input[node] = Set();
+            input[node] = Set();
             output[node] = this.nodes.dup;
         }
 
@@ -233,7 +233,7 @@ class FlowGraph
         return output;
     }
 
-    Exprs computeReachingExprs()
+    Exprs computeLiveness()
     {
         Exprs output = null;
         Exprs input = null;
@@ -252,6 +252,7 @@ class FlowGraph
             changed = false;
             foreach (node; this.nodes[])
             {
+                auto old_in = input[node].dup;
                 auto old_out = output[node].dup;
 
                 input[node] = node.generates + (old_out - node.kills);
@@ -259,7 +260,7 @@ class FlowGraph
                 foreach (succ; node.successors[])
                     output[node] = output[node] + input[succ];
 
-                if (output[node] != old_out)
+                if (output[node] != old_out || input[node] != old_in)
                     changed = true;
 
             }
