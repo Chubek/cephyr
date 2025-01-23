@@ -43,6 +43,8 @@ class FlowGraph
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
     alias Exprs = Nodes[FlowNode];
+    alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
+    alias Interference = Set!Label[Label];
 
     Nodes nodes;
     Edges edges;
@@ -233,7 +235,7 @@ class FlowGraph
         return output;
     }
 
-    Exprs computeLiveness()
+    Liveness computeExprs()
     {
         Exprs output = null;
         Exprs input = null;
@@ -242,6 +244,7 @@ class FlowGraph
         {
             if (node == this.entry_node)
                 continue;
+
             input[node] = Set();
             output[node] = this.nodes.dup;
         }
@@ -269,6 +272,31 @@ class FlowGraph
             }
         }
 
-        return output;
+        return tuple("live_in", "live_out")(input, output);
+    }
+
+    Interference computeInterference()
+    {
+        Interference interf;
+        Liveness liveness = this.computeLiveness();
+
+        Exprs live_out = liveness.live_out;
+        foreach (node, nodes; live_out)
+        {
+            interf[node.label] = Set();
+            Label[] alive;
+            foreach (node_prime; nodes[])
+            {
+                foreach (def; node_prime.instr.getDefinedVariables())
+                {
+                    interf[node.label] ~= def;
+                    alive ~= def;
+                }
+
+                foreach (live; alive)
+                    interf[node.label] ~= live;
+            }
+        }
+
     }
 }
