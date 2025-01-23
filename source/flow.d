@@ -252,6 +252,9 @@ class FlowGraph
             changed = false;
             foreach (node; this.nodes[])
             {
+                if (node == this.entry_node)
+                    continue;
+
                 auto old_in = input[node].dup;
                 auto old_out = output[node].dup;
 
