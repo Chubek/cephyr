@@ -4,6 +4,300 @@ import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.ran
 
 import cephyr.stack;
 
+struct Register
+{
+    enum Size
+    {
+        UpperByte,
+        LowerByte,
+        Word,
+        Double,
+        Quad,
+    }
+
+    enum Name
+    {
+        RAX,
+        RBX,
+        RCX,
+        RDX,
+        RSI,
+        RDI,
+        RBP,
+        RSP,
+        R8,
+        R9,
+        R10,
+        R11,
+        R12,
+        R13,
+        R14,
+        R15,
+        RIP,
+        RFLAGS,
+    }
+
+    Size size;
+    Name name;
+    int color = -1;
+
+    this(Size size, Name name)
+    {
+        this.size = size;
+        this.name = name;
+    }
+
+    void assignColor(int color)
+    {
+        this.color = color;
+    }
+
+    string toString() const
+    {
+        switch (this.name)
+        {
+        case Name.RAX:
+            switch (this.size)
+            {
+            case Size.UpperByte:
+                return "ah";
+            case Size.LowerByte:
+                return "al";
+            case Size.Double:
+                return "eax";
+            case Size.Quad:
+                return "rax";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RBX:
+            switch (this.size)
+            {
+            case Size.UpperByte:
+                return "bh";
+            case Size.LowerByte:
+                return "bl";
+            case Size.Double:
+                return "ebx";
+            case Size.Quad:
+                return "rbx";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RCX:
+            switch (this.size)
+            {
+            case Size.UpperByte:
+                return "ch";
+            case Size.LowerByte:
+                return "cl";
+            case Size.Double:
+                return "ecx";
+            case Size.Quad:
+                return "rcx";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RDX:
+            switch (this.size)
+            {
+            case Size.UpperByte:
+                return "dh";
+            case Size.LowerByte:
+                return "dl";
+            case Size.Double:
+                return "edx";
+            case Size.Quad:
+                return "rdx";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RSI:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "sil";
+            case Size.Double:
+                return "esi";
+            case Size.Quad:
+                return "rsi";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RDI:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "dil";
+            case Size.Double:
+                return "edi";
+            case Size.Quad:
+                return "rdi";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RBP:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "bpl";
+            case Size.Double:
+                return "ebp";
+            case Size.Quad:
+                return "rbp";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RSP:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "spl";
+            case Size.Double:
+                return "esp";
+            case Size.Quad:
+                return "rsp";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R8:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r8b";
+            case Size.Word:
+                return "r8w";
+            case Size.Double:
+                return "r8d";
+            case Size.Quad:
+                return "r8";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R9:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r9b";
+            case Size.Word:
+                return "r9w";
+            case Size.Double:
+                return "r9d";
+            case Size.Quad:
+                return "r9";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R10:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r10b";
+            case Size.Word:
+                return "r10w";
+            case Size.Double:
+                return "r10d";
+            case Size.Quad:
+                return "r10";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R11:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r11b";
+            case Size.Word:
+                return "r11w";
+            case Size.Double:
+                return "r11d";
+            case Size.Quad:
+                return "r11";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R12:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r12b";
+            case Size.Word:
+                return "r12w";
+            case Size.Double:
+                return "r12d";
+            case Size.Quad:
+                return "r12";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R13:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r13b";
+            case Size.Word:
+                return "r13w";
+            case Size.Double:
+                return "r13d";
+            case Size.Quad:
+                return "r13";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R14:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r14b";
+            case Size.Word:
+                return "r14w";
+            case Size.Double:
+                return "r14d";
+            case Size.Quad:
+                return "r14";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.R15:
+            switch (this.size)
+            {
+            case Size.LowerByte:
+                return "r15b";
+            case Size.Word:
+                return "r15w";
+            case Size.Double:
+                return "r15d";
+            case Size.Quad:
+                return "r15";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RIP:
+            switch (this.size)
+            {
+            case Size.Double:
+                return "eip";
+            case Size.Quad:
+                return "rip";
+            default:
+                throw new Error("Register name invalid");
+            }
+        case Name.RFLAGS:
+            switch (this.size)
+            {
+            case Size.Double:
+                return "eflags";
+            case Size.Quad:
+                return "rflags";
+            default:
+                throw new Error("Register name invalid");
+            }
+        default:
+            throw new Error("Unsupported register");
+        }
+    }
+}
+
 struct Label
 {
     enum DJB2_INIT = 5381;
@@ -18,6 +312,7 @@ struct Label
     Kind kind;
     int id;
     static int id_counter;
+    bool reserved;
 
     union
     {
@@ -29,6 +324,13 @@ struct Label
     {
         this.kind = Kind.Temporary;
         this.id = this.id_counter++;
+    }
+
+    this(Register v_register)
+    {
+        this.kind = Kind.InRegister;
+        this.v_register = v_register;
+        this.reserved = true;
     }
 
     size_t toHash()
@@ -46,17 +348,19 @@ struct Label
 
     void assignRegister(Register v_register)
     {
+        this.kind = Kind.InRegister;
         this.v_register = v_register;
     }
 
-    void assignMemoryOffset(size_t v_offset)
+    void spillToMemory(size_t v_offset)
     {
+        this.kind = Kind.Spilled;
         this.v_offset = v_offset;
     }
 
     bool isRegister() const
     {
-        return this.kind == Kind.Register;
+        return this.kind == Kind.InRegister;
     }
 
     bool isSpilled() const
