@@ -1,11 +1,74 @@
 module cephyr.inter;
 
-import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.range;
+import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.range, std.conv;
 
-import cephyr.temporary;
 import cephyr.stack;
 
-static TemporaryManager temp_manager = new TemporaryManager();
+struct Label
+{
+    enum DJB2_INIT = 5381;
+
+    enum Kind
+    {
+        InRegister,
+        Spilled,
+        Temporary,
+    }
+
+    Kind kind;
+    int id;
+    static int id_counter;
+
+    union
+    {
+        Register v_register;
+        size_t v_offset;
+    }
+
+    this()
+    {
+        this.kind = Kind.Temporary;
+        this.id = this.id_counter++;
+    }
+
+    size_t toHash()
+    {
+        size_t hash = DJB2_INIT;
+        foreach (chr; this.id.to!string)
+            hash = (hash << 5) + hash + chr;
+        return hash;
+    }
+
+    bool opEqual(const Label rhs) const
+    {
+        return this.id == rhs.id;
+    }
+
+    void assignRegister(Register v_register)
+    {
+        this.v_register = v_register;
+    }
+
+    void assignMemoryOffset(size_t v_offset)
+    {
+        this.v_offset = v_offset;
+    }
+
+    bool isRegister() const
+    {
+        return this.kind == Kind.Register;
+    }
+
+    bool isSpilled() const
+    {
+        return this.kind == Kind.Spilled;
+    }
+
+    bool isTemporary() const
+    {
+        return this.kind == Kind.Temporary;
+    }
+}
 
 enum OpCode
 {
