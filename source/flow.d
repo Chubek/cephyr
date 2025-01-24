@@ -11,9 +11,10 @@ import cephyr.temporary;
 class FlowNode
 {
     alias FlowNodeSet = Set!FlowNode;
+    alias Instr = Stack!IRInstruction;
 
     Label label;
-    IRInstruction instr;
+    Instr instr;
     FlowNodeSet predecessors;
     FlowNodeSet successors;
     FlowNodeSet generates;
@@ -34,6 +35,11 @@ class FlowNode
     {
         this.successor ~= node;
     }
+
+    void addInstr(IRInstruction instr)
+    {
+        this.instr.push(instr);
+    }
 }
 
 class FlowGraph
@@ -43,6 +49,7 @@ class FlowGraph
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
     alias Exprs = Nodes[FlowNode];
+    alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
     alias Interference = Set!Label[Label];
 
@@ -187,18 +194,21 @@ class FlowGraph
         foreach (node; this.nodes[])
         {
             bool[Label] defined = false;
-            foreach (def; node.instr.getDefinedVariables())
+            foreach (instr; node.instr[])
             {
-                if (defined[def])
-                    node.killed ~= node;
+                foreach (def; instr.getDefinedVariables())
+                {
+                    if (defined[def])
+                        node.kills ~= def;
 
-                defined[def] = true;
-                node.generated ~= node;
+                    defined[def] = true;
+                    node.generates ~= def;
+                }
             }
         }
     }
 
-    Exprs computeAvailableExprs()
+    AvailExprs computeAvailableExprs()
     {
         Exprs output = null;
         Exprs input = null;
@@ -220,6 +230,7 @@ class FlowGraph
                 if (node == this.entry_node)
                     continue;
 
+                auto old_in = input[node].dup;
                 auto old_out = output[node].dup;
 
                 foreach (pred; node.predecessors[])
@@ -227,12 +238,12 @@ class FlowGraph
 
                 output[node] = node.generates + (input[node] - node.kills);
 
-                if (output[node] != old_out)
+                if (output[node] != old_out || input[node] != old_in)
                     changed = true;
             }
         }
 
-        return output;
+        return tuple("in", "out")(input, output);
     }
 
     Liveness computeExprs()
@@ -284,20 +295,19 @@ class FlowGraph
         foreach (node, nodes; live_out)
         {
             interf[node.label] = Set();
-            Label[] alive;
             foreach (node_prime; nodes[])
             {
-                foreach (def; node_prime.instr.getDefinedVariables())
+                foreach (instr; node_prime.instr[])
                 {
-                    interf[node.label] ~= def;
-                    alive ~= def;
-                }
+                    foreach (def; instr.getDefinedVariables())
+                        interf[node.label] ~= def;
 
-                foreach (live; alive)
-                    interf[node.label] ~= live;
+                    foreach (use; instr.getUsedVariables())
+                        interf[node.label] ~= use;
+                }
             }
         }
 
-	return interf;
+        return interf;
     }
 }
