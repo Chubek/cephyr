@@ -11,18 +11,16 @@ import cephyr.temporary;
 class FlowNode
 {
     alias FlowNodeSet = Set!FlowNode;
-    alias Instr = Stack!IRInstruction;
+    alias Instructions = Stack!IRInstruction;
 
-    Label label;
-    Instr instr;
+    Instructions instr;
     FlowNodeSet predecessors;
     FlowNodeSet successors;
     FlowNodeSet generates;
     FlowNodeSet kills;
 
-    this(Label label, IRInstruction instr)
+    this(Instructions instr)
     {
-        this.label = label;
         this.instr = instr;
     }
 
@@ -48,11 +46,12 @@ class FlowGraph
     alias Edges = Nodes[FlowNode];
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
-    alias Loops = Set!FlowNode;
+    alias Loops = Set!Nodes;
     alias Exprs = Nodes[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
     alias Interference = Set!Label[Label];
+    alias NestingTree = Nodes[FlowEdge];
 
     Nodes nodes;
     Edges edges;
@@ -143,7 +142,7 @@ class FlowGraph
     Loops detectLoops()
     {
         Loops loops;
-        bool[FlowNode] in_path = false;
+        Nodes in_path;
         bool[FlowNode] visited = false;
 
         void dfsVisit(FlowNode node)
@@ -151,19 +150,24 @@ class FlowGraph
             if (visited[node])
                 return;
 
-            if (in_path[node])
-                loops ~= node;
+            if (node in in_path)
+                loops ~= in_path;
 
-            in_path[node] = true;
-            visited[node] = true;
+            in_path ~= node;
 
             foreach (succ; node.successors[])
                 dfsVisit(succ);
 
-            in_path.remove(node);
+            in_path = in_path.removeItem(node);
+            visited[node] = true;
         }
 
         dfsVisit(this.entry_node);
+
+        foreach (node; this.nodes[])
+            if (node !in visited)
+                dfsVisit(node);
+
         return loops;
     }
 
@@ -182,7 +186,7 @@ class FlowGraph
                     kills ~= def;
             }
 
-            node.generates = generates - kills;
+            node.generates = (generates - kills).dup;
             node.kills = kills.dup;
         }
     }
@@ -196,7 +200,7 @@ class FlowGraph
         {
             if (node == this.entry_node)
                 continue;
-            input[node] = Set();
+            input[node] = new Set();
             output[node] = this.nodes.dup;
         }
 
@@ -235,7 +239,7 @@ class FlowGraph
             if (node == this.entry_node)
                 continue;
 
-            input[node] = Set();
+            input[node] = new Set();
             output[node] = this.nodes.dup;
         }
 
@@ -265,28 +269,65 @@ class FlowGraph
         return tuple("live_in", "live_out")(input, output);
     }
 
-    Interference computeInterference()
+    Interference computeInterference(Liveness liveness)
     {
         Interference interf;
-        Liveness liveness = this.computeLiveness();
 
-        Exprs live_out = liveness.live_out;
+        auto live_out = liveness.live_out;
+
         foreach (node, nodes; live_out)
         {
-            interf[node.label] = Set();
-            foreach (node_prime; nodes[])
+            foreach (live_out_node; nodes[])
             {
-                foreach (instr; node_prime.instr[])
+                foreach (instr1; live_out_node.instr[])
                 {
-                    foreach (def; instr.getDefinedVariables())
-                        interf[node.label] ~= def;
-
-                    foreach (use; instr.getUsedVariables())
-                        interf[node.label] ~= use;
+                    foreach (instr2; live_out_node.instr[])
+                    {
+                        foreach (var1; instr1.getAllVariables())
+                        {
+                            foreach (var2; instr2.getAllVariables())
+                            {
+                                if (var1 != var2)
+                                {
+                                    interf[var1] ~= var2;
+                                    interf[var2] ~= var1;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
         return interf;
+    }
+
+    NestingTree buildLoopNestingTree(Loops loops)
+    {
+        NestingTree output;
+
+        Nullable!Nodes findParentLoop(Nodes loop, Loops loops)
+        {
+            Nullable!Nodes parent;
+
+            foreach (other_loop; loops[])
+            {
+                if (loop != other_loop && loop in other_loop)
+                {
+                    parent = other_loop;
+                    return parent;
+                }
+            }
+
+            return parent;
+        }
+
+        foreach (loop; loops[])
+        {
+            auto parent = findParentLoop(loop, loops);
+            output[parent] ~= loop;
+        }
+
+        return output;
     }
 }
