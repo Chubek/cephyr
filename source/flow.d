@@ -48,6 +48,7 @@ class FlowGraph
     alias Edges = Nodes[FlowNode];
     alias Dominators = Nodes[FlowNode];
     alias IDoms = FlowNode[FlowNode];
+    alias Loops = Set!FlowNode;
     alias Exprs = Nodes[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
@@ -139,72 +140,50 @@ class FlowGraph
         return idoms;
     }
 
-    void topologicalSortForwards()
+    Loops detectLoops()
     {
-        Nodes sorted;
-        bool[FlowNode] in_stack = false;
+        Loops loops;
+        bool[FlowNode] in_path = false;
         bool[FlowNode] visited = false;
 
         void dfsVisit(FlowNode node)
         {
-            if (node in in_stack || node in visited)
+            if (visited[node])
                 return;
 
-            in_stack[node] = true;
+            if (in_path[node])
+                loops ~= node;
+
+            in_path[node] = true;
             visited[node] = true;
 
             foreach (succ; node.successors[])
                 dfsVisit(succ);
 
-            in_stack.remove(node);
-            sorted ~= *node;
+            in_path.remove(node);
         }
 
         dfsVisit(this.entry_node);
-        this.nodes = sorted;
-    }
-
-    void topologicalSortBackwards()
-    {
-        Nodes sorted;
-        bool[FlowNode] in_stack = false;
-        bool[FlowNode] visited = false;
-
-        void dfsVisit(FlowNode node)
-        {
-            if (node in in_stack || node in visited)
-                return;
-
-            in_stack[node] = true;
-            visited[node] = true;
-
-            foreach (pred; node.predecessors[])
-                dfsVisit(pred);
-
-            in_stack.remove(node);
-            sorted ~= *node;
-        }
-
-        dfsVisit(this.exit_node);
-        this.nodes = sorted;
+        return loops;
     }
 
     void computeGenKillSets()
     {
         foreach (node; this.nodes[])
         {
-            bool[Label] defined = false;
+            Nodes generates;
+            Nodes kills;
             foreach (instr; node.instr[])
             {
-                foreach (def; instr.getDefinedVariables())
-                {
-                    if (defined[def])
-                        node.kills ~= def;
+                foreach (use; instr.getUsedVaribles())
+                    generates ~= use;
 
-                    defined[def] = true;
-                    node.generates ~= def;
-                }
+                foreach (def; instr.getDefinedVariables())
+                    kills ~= def;
             }
+
+            node.generates = generates - kills;
+            node.kills = kills.dup;
         }
     }
 
@@ -246,7 +225,7 @@ class FlowGraph
         return tuple("in", "out")(input, output);
     }
 
-    Liveness computeExprs()
+    Liveness computeLiveness()
     {
         Exprs output = null;
         Exprs input = null;
