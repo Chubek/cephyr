@@ -77,6 +77,11 @@ class Set(T)
         return this.container.canFind(item);
     }
 
+    Set!T removeItem(T item)
+    {
+        return new Set!T(this.filter!(x => x != item));
+    }
+
     Set!T unionWith(Set!T other)
     {
         Set!T set_union = new Set!T();
