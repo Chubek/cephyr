@@ -478,4 +478,14 @@ class IRInstruction
         }
         return uses;
     }
+
+    Label[] getAllVariables() const
+    {
+        Label[] variables;
+        foreach (def; getDefinedVariables())
+            variables ~= def;
+        foreach (use; getUsedVariables())
+            variables ~= use;
+        return variables;
+    }
 }
