@@ -50,8 +50,11 @@ class FlowGraph
     alias Exprs = Nodes[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
+    alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
+    alias LiveRanges = Set!LiveRange[Label];
     alias Interference = Set!Label[Label];
-    alias NestingTree = Nodes[FlowEdge];
+    alias NestingTree = Nodes[Nodes];
+    alias NestingDepth = size_t[Nodes];
 
     Nodes nodes;
     Edges edges;
@@ -269,6 +272,43 @@ class FlowGraph
         return tuple("live_in", "live_out")(input, output);
     }
 
+    LiveRanges computeLiveRanges()
+    {
+        LiveRanges output;
+
+        foreach (node; this.nodes[])
+        {
+            foreach (instr; node.instr[])
+            {
+                foreach (use; instr.getUsedVariables())
+                {
+                    if (use !in output)
+                        output[use] = tuple("start", "end")(instr.id, instr.id);
+                    else
+                    {
+                        auto range = output[use];
+                        output[use] = tuple("start", "end")(range.start, instr.id);
+                    }
+                }
+
+                foreach (def; instr.getDefinedVariables())
+                {
+                    if (def !in output)
+                        output[def] = tuple("start", "end")(instr.id, instr.id);
+                    else
+                    {
+                        auto range = output[def];
+                        output[def] = tuple("start", "end")(range.start, instr.id);
+                    }
+
+                }
+
+            }
+        }
+
+	return output;
+    }
+
     Interference computeInterference(Liveness liveness)
     {
         Interference interf;
@@ -325,9 +365,32 @@ class FlowGraph
         foreach (loop; loops[])
         {
             auto parent = findParentLoop(loop, loops);
-            output[parent] ~= loop;
+
+            if (parent.isNull)
+                output[new Set()] ~= loop;
+            else
+                output[parent.get] ~= loop;
         }
 
+        return output;
+    }
+
+    NestingDepth calculateNestingDepths(NestingTree nesting_tree)
+    {
+        NestingDepth output;
+
+        void assignNestingDepths(NestingTree nesting_tree,
+                ref NestingDepth output, current_loop = null, current_depth = 0)
+        {
+            if (!current_loop)
+                current_loop = new Set();
+
+            output[current_loop] = current_depth;
+            foreach (child_loop; nesting_tree[current_loop])
+                assignNestingDepths(nesting_tree, output, child_loop, current_depth + 1);
+        }
+
+        assignNestingDepths(nesting_tree, output);
         return output;
     }
 }
