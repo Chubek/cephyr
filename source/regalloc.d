@@ -1,6 +1,6 @@
 module cephyr.regalloc;
 
-import std.typecons, std, sumtype, std.conv, std.container, std.array;
+import std.typecons, std, sumtype, std.conv, std.container, std.array, std.math;
 
 import cephyr.set;
 import cephyr.flow;
@@ -16,12 +16,14 @@ class RegisterAllocator
     alias LiveRanges = FlowGraph.LiveRanges;
     alias NestingDepths = FlowGraph.NestingDepths;
     alias AccessFreq = FlowGraph.AccessFreq;
+    alias Instructions = Set!IRInstruction;
     alias RegisterSet = Set!Register;
     alias LabelStack = Stack!Label;
+    alias Coloring = int[Label];
 
     Interference interf;
     RegisterSet pre_colored;
-    LabelStack label_stack;
+    Coloring coloring;
 
     this(Interference interf)
     {
@@ -30,31 +32,30 @@ class RegisterAllocator
 
     void fillPrecoloredRegisters()
     {
+        foreach (label, _; this.interf)
+        {
+            if (label.reserved)
+                this.pre_colored ~= label_prime.v_register;
+        }
+    }
+
+    LabelStack simplifyGraph()
+    {
+        LabelStack output;
+
         foreach (label, labels; this.interf)
         {
-            foreach (label_prime; labels)
-                if (label_prime.reserved)
-                    this.pre_colored ~= label_prime.v_register;
-        }
-    }
-
-    Interference simplifyGraph()
-    {
-        Interference interf = this.interf.dup;
-
-        foreach (label, labels; interf)
-        {
             if (labels.getLength() < NUM_REGISTERS)
-                this.label_stack ~= label;
+                output ~= label;
 
-            interf.remove(label);
+            this.interf.remove(label);
 
         }
 
-        return interf;
+        return output;
     }
 
-    Label selectSpillCandidate(Interference interf, LiveRanges live_ranges,
+    Label selectSpillCandidate(LiveRanges live_ranges,
             NestingInstr instr_nesting_depths, AccessFreq acc_freq)
     {
         Label spill_candidate = null;
@@ -72,14 +73,14 @@ class RegisterAllocator
             {
                 total_depth += instr_nesting_depths[instr_id];
             }
-            auto average_depth = total_depth / live_span;
+            auto average_depth = floor(total_depth / live_span);
 
-            return acc_freq[labe] * live_span * (1 + average_depth);
+            return acc_freq[label] * live_span * (1 + average_depth);
         }
 
-        foreach (label, labels; interf)
+        foreach (label, _; this.interf)
         {
-            if (label in this.pre_colored)
+            if (label.register in this.pre_colored)
                 continue;
 
             auto cost = computeSpillCost(label);
@@ -93,4 +94,38 @@ class RegisterAllocator
         return spill_candidate;
     }
 
+    void coalesceRegisters(Instructions move_instrs)
+    {
+        foreach (move_instr; move_instrs)
+        {
+            auto src = move_instr.src[0];
+            auto dst = move_instr.dst;
+
+            if (src.register in this.pre_colored || dst.register in this.pre_colored)
+                continue;
+
+            if (src in this.coloring && dst in this.coloring)
+            {
+                if (dst !in this.interf[src])
+                {
+                    if (src.register in this.pre_colored)
+                        this.coloring[dst] = this.coloring[src];
+                    else if (dst.register in this.pre_colored)
+                        this.coloring[src] = this.coloring[dst];
+                    else
+                    {
+                        this.interf[dst] = this.interf[src] + this.interf[dst];
+                        this.interf.remove(src);
+                        this.coloring[dst] = this.coloring[src];
+                        this.coloring.remove(src);
+                    }
+                }
+            }
+        }
+    }
+
+    Coloring colorInterferenceGraph()
+    {
+	// TODO
+    }
 }
