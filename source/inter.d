@@ -4,6 +4,8 @@ import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.ran
 
 import cephyr.stack;
 
+alias InstrID = int;
+
 struct Register
 {
     enum Size
@@ -424,7 +426,8 @@ class IRInstruction
     OpCode op;
     Label dst;
     Label[] srcs;
-    Label label;
+    InstrID id;
+    static InstrID id_counter;
     size_t size;
 
     bool defines_value;
@@ -435,7 +438,7 @@ class IRInstruction
         this.op = op;
         this.dst = dst;
         this.srcs = srcs;
-        this.label = label;
+        this.id = this.id_counter++;
 
         final switch (op)
         {

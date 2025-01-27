@@ -1,6 +1,7 @@
 module cephyr.flow;
 
-import std.typecons, std.variant, std.sumtype, std.array, std.algorithm, std.range, std.conv;
+import std.typecons, std.variant, std.sumtype, std.array, std.algorithm,
+    std.range, std.conv, std.math;
 
 import cephyr.set;
 import cephyr.stack;
@@ -50,11 +51,14 @@ class FlowGraph
     alias Exprs = Nodes[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
-    alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
+alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
     alias LiveRanges = Set!LiveRange[Label];
     alias Interference = Set!Label[Label];
     alias NestingTree = Nodes[Nodes];
     alias NestingDepth = size_t[Nodes];
+    alias NestingInstr = size_t[InstrID];
+    alias AccessFreq = size_t[Label];
+    alias Instructions = Set!IRInstruction;
 
     Nodes nodes;
     Edges edges;
@@ -78,6 +82,29 @@ class FlowGraph
     void markAsExit(FlowNode node)
     {
         this.exit_node = node;
+    }
+
+    Instructions getAllInstructions()
+    {
+        Instructions instrs;
+        bool[FlowNode] visited = false;
+
+        void appendInstr(FlowNode node)
+        {
+            if (visited[node])
+                return;
+
+            instrs = instrs + node.instr;
+            visited[node] = true;
+
+            foreach (pred; node.predecessors[])
+                appendInstr(pred);
+            foreach (succ; node.successors[])
+                appendInstr(succ);
+        }
+
+        appendInstr(this.entry_node);
+        return instrs;
     }
 
     Dominators computeDominators()
@@ -306,7 +333,7 @@ class FlowGraph
             }
         }
 
-	return output;
+        return output;
     }
 
     Interference computeInterference(Liveness liveness)
@@ -393,4 +420,48 @@ class FlowGraph
         assignNestingDepths(nesting_tree, output);
         return output;
     }
+
+    NestingInstr calculateInstrNestingDepths(NestingDepths nesting_depths)
+    {
+        NestingInstr output;
+
+        foreach (node; this.nodes[])
+        {
+            foreach (instr; node.getAllInstructions().opSlice())
+            {
+                auto max_depth = 0;
+                foreach (loop, depth; nesting_depths)
+                {
+                    if (loop.filter!(x => instr in x.getAllInstructions()).length > 0)
+                        max_depth = max(max_depth, depth);
+                }
+                output[instr.id] = max_depth;
+            }
+        }
+
+        return output;
+    }
+
+    AccessFreq calculateAccessFrequencies()
+    {
+        AccessFreq output = null;
+
+        foreach (node; this.nodes[])
+        {
+            foreach (instr; node.instr[])
+            {
+                foreach (var; instr.getAllVariables())
+                {
+                    if (var !in output)
+                        output[var] = 1;
+                    else
+                        output[var] += 1;
+                }
+
+            }
+        }
+
+        return output;
+    }
+
 }
