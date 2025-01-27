@@ -41,17 +41,11 @@ struct Register
 
     Size size;
     Name name;
-    int color = -1;
 
     this(Size size, Name name)
     {
         this.size = size;
         this.name = name;
-    }
-
-    void assignColor(int color)
-    {
-        this.color = color;
     }
 
     string toString() const

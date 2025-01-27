@@ -51,7 +51,7 @@ class FlowGraph
     alias Exprs = Nodes[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
-alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
+    alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
     alias LiveRanges = Set!LiveRange[Label];
     alias Interference = Set!Label[Label];
     alias NestingTree = Nodes[Nodes];
@@ -452,13 +452,11 @@ alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
             {
                 foreach (var; instr.getAllVariables())
                 {
-                    if (var !in output)
-                        output[var] = 1;
-                    else
-                        output[var] += 1;
+                    output.require(var, 1);
+                    output[var] += 1;
                 }
-
             }
+
         }
 
         return output;
