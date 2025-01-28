@@ -97,7 +97,7 @@ class Set(T)
 
     Set!T differenceWith(Set!T other)
     {
-        auto uncommon = other.filter!(x => !hasItem(x));
+        auto uncommon = this.filter!(x => !other.hasItem(x));
         return new Set(uncommon);
     }
 
