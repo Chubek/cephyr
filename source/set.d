@@ -84,9 +84,9 @@ class Set(T)
 
     Set!T unionWith(Set!T other)
     {
-        Set!T set_union = new Set!T();
-        other.iter!(x => set_union.insert(x));
-        return set_union;
+        Set!T meet = this.dup;
+        meet.concat(other.map!(x => x));
+        return meet;
     }
 
     Set!T intersectWith(Set!T other)
