@@ -15,19 +15,33 @@ class RegisterAllocator
     alias Liveness = FlowGraph.Liveness;
     alias LiveRanges = FlowGraph.LiveRanges;
     alias NestingDepths = FlowGraph.NestingDepths;
+    alias NestingInstr = FlowGraph.NestingInstr;
     alias AccessFreq = FlowGraph.AccessFreq;
+    alias MoveEdges = FlowGraph.MoveEdges;
     alias Instructions = Set!IRInstruction;
     alias RegisterSet = Set!Register;
     alias LabelStack = Stack!Label;
+    alias LabelSet = Set!Label;
     alias Coloring = int[Label];
 
     Interference interf;
+    LiveRanges live_ranges;
+    AccessFreq acc_freq;
+    MoveEdges move_edges;
+    NestingInstr nesting_instr;
     RegisterSet pre_colored;
-    Coloring coloring;
 
-    this(Interference interf)
+    Coloring coloring;
+    LabelSet spilled_nodes;
+
+    this(Interference interf, LiveRanges live_ranges, AccessFreq acc_freq,
+            NestingInstr nesting_instr, MoveEdges move_edges)
     {
         this.interf = interf;
+        this.live_ranges = live_ranges;
+        this.acc_freq = acc_freq;
+        this.nesting_instr = nesting_instr;
+	this.move_edges = move_edges;
     }
 
     void fillPrecoloredRegisters()
@@ -39,31 +53,64 @@ class RegisterAllocator
         }
     }
 
-    LabelStack simplifyGraph()
+    void colorInterferenceGraph()
     {
-        LabelStack output;
+        LabelStack stack;
+        LabelStack worklist = new Stack(this.interf.keys());
 
-        foreach (label, labels; this.interf)
+        while (!worklist.isEmpty())
         {
-            if (labels.getLength() < NUM_REGISTERS)
-                output ~= label;
-
-            this.interf.remove(label);
-
+            auto simplified = worklist.filter!(x => this.interf[x].getLength() < NUM_REGISTERS);
+            if (simplified)
+            {
+                auto node = simplified[0];
+                stack.push(node);
+                worklist = worklist.removeItem(node);
+                foreach (neigh; this.interf[node][])
+                    this.interf[neigh] = this.interf[neigh].removeItem(node);
+            }
+            else
+            {
+                auto spill_candidate = selectSpillCandidate();
+                this.spilled_nodes ~= spill_candidate;
+                foreach (neigh; this.interf[spill_candidate][])
+                    this.interf[neigh] = this.interf[neigh].removeItem(spill_candidate);
+                this.interf.remove(spill_candidate);
+            }
         }
 
-        return output;
+        while (!stack.isEmpty())
+        {
+            auto node = stack.pop();
+            Stack!int used_colors;
+
+            foreach (neigh; this.interf[node])
+                if (neigh in coloring)
+                    used_colors.push(this.coloring[neigh]);
+
+            foreach (color; 0 .. NUM_REGISTERS)
+            {
+                if (color !in used_colors)
+                {
+                    this.coloring[node] = color;
+                    break;
+                }
+                else
+                    this.spilled_nodes ~= node;
+            }
+        }
+
+        this.coalesceRegisters();
     }
 
-    Label selectSpillCandidate(LiveRanges live_ranges,
-            NestingInstr instr_nesting_depths, AccessFreq acc_freq)
+    Label selectSpillCandidate()
     {
         Label spill_candidate = null;
         auto max_cost = -1;
 
         int computeSpillCost(Label label)
         {
-            auto live_range = live_ranges[label];
+            auto live_range = this.live_ranges[label];
             auto start = live_range.start;
             auto end = live_range.end;
             auto live_span = end - start;
@@ -71,16 +118,16 @@ class RegisterAllocator
             auto total_depth = 0;
             foreach (instr_id; start .. end)
             {
-                total_depth += instr_nesting_depths[instr_id];
+                total_depth += this.nesting_instr[instr_id];
             }
             auto average_depth = floor(total_depth / live_span);
 
-            return acc_freq[label] * live_span * (1 + average_depth);
+            return this.acc_freq[label] * live_span * (1 + average_depth);
         }
 
         foreach (label, _; this.interf)
         {
-            if (label.register in this.pre_colored)
+            if (label.v_register in this.pre_colored)
                 continue;
 
             auto cost = computeSpillCost(label);
@@ -94,23 +141,26 @@ class RegisterAllocator
         return spill_candidate;
     }
 
-    void coalesceRegisters(Instructions move_instrs)
+    void coalesceRegisters()
     {
-        foreach (move_instr; move_instrs)
+        foreach (move_edge; this.move_edges)
         {
-            auto src = move_instr.src[0];
-            auto dst = move_instr.dst;
+            auto src = move_edge.source;
+            auto dst = move_edge.destination;
 
-            if (src.register in this.pre_colored || dst.register in this.pre_colored)
+            if (!src.isRegister() || !dst.isRegister())
+                continue;
+
+            if (src.v_register in this.pre_colored || dst.v_register in this.pre_colored)
                 continue;
 
             if (src in this.coloring && dst in this.coloring)
             {
                 if (dst !in this.interf[src])
                 {
-                    if (src.register in this.pre_colored)
+                    if (src.v_register in this.pre_colored)
                         this.coloring[dst] = this.coloring[src];
-                    else if (dst.register in this.pre_colored)
+                    else if (dst.v_register in this.pre_colored)
                         this.coloring[src] = this.coloring[dst];
                     else
                     {
@@ -124,8 +174,4 @@ class RegisterAllocator
         }
     }
 
-    Coloring colorInterferenceGraph()
-    {
-	// TODO
-    }
 }
