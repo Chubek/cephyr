@@ -12,13 +12,14 @@ import cephyr.temporary;
 class FlowNode
 {
     alias FlowNodeSet = Set!FlowNode;
+    alias LabelSet = Set!Label;
     alias Instructions = Stack!IRInstruction;
 
     Instructions instr;
     FlowNodeSet predecessors;
     FlowNodeSet successors;
-    FlowNodeSet generates;
-    FlowNodeSet kills;
+    LabelSet generates;
+    LabelSet kills;
 
     this(Instructions instr)
     {
@@ -35,6 +36,16 @@ class FlowNode
         this.successor ~= node;
     }
 
+    void addGeneratedVariable(Label variable)
+    {
+        this.generates ~= variable;
+    }
+
+    void addKilledVariable(Label variable)
+    {
+        this.kills ~= variable;
+    }
+
     void addInstr(IRInstruction instr)
     {
         this.instr.push(instr);
@@ -46,11 +57,11 @@ class FlowGraph
     alias Nodes = Set!FlowNode;
     alias Edges = Nodes[FlowNode];
     alias Dominators = Nodes[FlowNode];
-    alias IDoms = FlowNode[FlowNode];
+    alias IDoms = Nullable!FlowNode[FlowNode];
     alias Loops = Set!Nodes;
-    alias Exprs = Nodes[FlowNode];
+    alias Exprs = Set!Label[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
-    alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
+    alias Liveness = Tuple!(Set!Label, "live_in", Set!Label, "live_out");
     alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
     alias LiveRanges = Set!LiveRange[Label];
     alias Interference = Set!Label[Label];
@@ -59,6 +70,12 @@ class FlowGraph
     alias NestingInstr = size_t[InstrID];
     alias AccessFreq = size_t[Label];
     alias Instructions = Set!IRInstruction;
+    alias BackEdge = Tuple!(FlowNode, "source", FlowNode, "destination");
+    alias BackEdges = Set!BackEdge;
+    alias NaturalLoop = Tuple!(FlowNode, "header", Set!FlowNode, "body");
+    alias NaturalLoops = Set!NaturalLoop;
+    alias MoveEdge = Tuple!(Label, "source", Label, "destination");
+    alias MoveEdges = Set!MoveEdge;
 
     Nodes nodes;
     Edges edges;
@@ -107,6 +124,19 @@ class FlowGraph
         return instrs;
     }
 
+    MoveEdges computeMoveEdges()
+    {
+        MoveEdges output;
+
+        foreach (instr; this.getAllInstructions()[])
+        {
+            if (instr.isMove())
+                output ~= tuple("source", "destination")(instr.src[0], instr.dst);
+        }
+
+        return output;
+    }
+
     Dominators computeDominators()
     {
         Dominators output = null;
@@ -149,24 +179,82 @@ class FlowGraph
 
     IDoms computeIDoms(Dominators dominators)
     {
-        IDoms idoms = null;
+        Nullable!FlowNode idom;
+        IDoms idoms = idom.dup;
+
+        FlowNode isClosestNode(FlowNode node, FlowNode dominator)
+        {
+            foreach (dom; dominators[node][])
+                if (dom != node && dom != dominator)
+                    if (dominator in dominators[dom])
+                        return false;
+
+            return true;
+        }
 
         foreach (node; this.nodes[])
         {
-            if (node == this.entry_node || node in idoms)
+            if (node == this.entry_node)
                 continue;
 
-            foreach (discrim_node; this.nodes[])
+            foreach (dom; dominators[node][])
             {
-                if (discrim_node != node && discrim_node !in idoms && discrim_node in dominators[node])
+                if (dom != node)
                 {
-                    idoms[node] = discrim_node;
-                    break;
+                    if (isClosestNode(node, dom))
+                    {
+                        idoms[node] = dom;
+                        break;
+                    }
                 }
             }
         }
 
         return idoms;
+    }
+
+    BackEdges identifyBackEdges(Dominators dominators)
+    {
+        BackEdges output;
+
+        foreach (node; this.nodes[])
+        {
+            foreach (succ; node.successors[])
+            {
+                if (succ in dominators[node])
+                    output ~= tuple("source", "destination")(node, succ);
+            }
+        }
+
+        return output;
+    }
+
+    NaturalLoops constructNaturalLoops(BackEdges back_edges)
+    {
+        NaturalLoops output;
+
+        foreach (back_edge; back_edges)
+        {
+            auto header = back_edge.destination;
+            Set!FlowNode loop_nodes = new Set();
+            Stack!FlowNode stack = new Stack([header]);
+
+            while (!stack.isEmpty())
+            {
+                auto current = stack.pop();
+                if (current !in loop_nodes)
+                    loop_nodes ~= current;
+
+                foreach (pred; current.predecessors[])
+                    if (pred != header)
+                        stack.push(pred);
+            }
+
+            loop_nodes ~= header;
+            output ~= tuple("header", "body")(header, output);
+        }
+
+        return output;
     }
 
     Loops detectLoops()
@@ -205,8 +293,8 @@ class FlowGraph
     {
         foreach (node; this.nodes[])
         {
-            Nodes generates;
-            Nodes kills;
+            Set!Label generates;
+            Set!Label kills;
             foreach (instr; node.instr[])
             {
                 foreach (use; instr.getUsedVaribles())
@@ -216,7 +304,7 @@ class FlowGraph
                     kills ~= def;
             }
 
-            node.generates = (generates - kills).dup;
+            node.generates = generates - kills;
             node.kills = kills.dup;
         }
     }
@@ -230,6 +318,7 @@ class FlowGraph
         {
             if (node == this.entry_node)
                 continue;
+
             input[node] = new Set();
             output[node] = this.nodes.dup;
         }
@@ -340,30 +429,11 @@ class FlowGraph
     {
         Interference interf;
 
-        auto live_out = liveness.live_out;
+        auto live_out_sets = liveness.live_out;
 
-        foreach (node, nodes; live_out)
+        foreach (_, live_out_set; live_out_sets)
         {
-            foreach (live_out_node; nodes[])
-            {
-                foreach (instr1; live_out_node.instr[])
-                {
-                    foreach (instr2; live_out_node.instr[])
-                    {
-                        foreach (var1; instr1.getAllVariables())
-                        {
-                            foreach (var2; instr2.getAllVariables())
-                            {
-                                if (var1 != var2)
-                                {
-                                    interf[var1] ~= var2;
-                                    interf[var2] ~= var1;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+
         }
 
         return interf;
