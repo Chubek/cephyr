@@ -485,4 +485,9 @@ class IRInstruction
             variables ~= use;
         return variables;
     }
+
+    bool isMove() const
+    {
+        return this.op == OpCode.Move;
+    }
 }
