@@ -42,10 +42,35 @@ struct Register
     Size size;
     Name name;
 
-    this(Size size, Name name)
+    this(Name name)
     {
-        this.size = size;
+        this.size = Size.Double;
         this.name = name;
+    }
+
+    void demoteToLowerByte()
+    {
+        this.size = Size.LowerByte;
+    }
+
+    void demoteToHigherByte()
+    {
+        this.size = Size.HigherByte;
+    }
+
+    void demoteToWord()
+    {
+        this.size = Size.Word;
+    }
+
+    void remoteToDouble()
+    {
+        this.size = Size.Double;
+    }
+
+    void promoteToQuad()
+    {
+        this.size = Size.Quad;
     }
 
     string toString() const
@@ -295,7 +320,7 @@ struct Register
 
     static Register fromColor(int color)
     {
-        // TODO
+	// TODO
     }
 }
 
