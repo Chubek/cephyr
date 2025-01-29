@@ -292,6 +292,11 @@ struct Register
             throw new Error("Unsupported register");
         }
     }
+
+    static Register fromColor(int color)
+    {
+        // TODO
+    }
 }
 
 struct Label
@@ -337,15 +342,15 @@ struct Label
         return hash;
     }
 
-    bool opEqual(const Label rhs) const
+    bool opEquals(const Label rhs) const
     {
         return this.id == rhs.id;
     }
 
-    void assignRegister(Register v_register)
+    void promoteToRegister(int color)
     {
         this.kind = Kind.InRegister;
-        this.v_register = v_register;
+        this.v_register = Register.fromColor(color);
     }
 
     void spillToMemory(size_t v_offset)
