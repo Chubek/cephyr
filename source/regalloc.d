@@ -41,7 +41,7 @@ class RegisterAllocator
         this.live_ranges = live_ranges;
         this.acc_freq = acc_freq;
         this.nesting_instr = nesting_instr;
-	this.move_edges = move_edges;
+        this.move_edges = move_edges;
     }
 
     void fillPrecoloredRegisters()
@@ -100,6 +100,7 @@ class RegisterAllocator
             }
         }
 
+        this.assignRegisters();
         this.coalesceRegisters();
     }
 
@@ -141,15 +142,18 @@ class RegisterAllocator
         return spill_candidate;
     }
 
+    void assignRegisters()
+    {
+        foreach (ref label, color; this.coloring)
+            label.promoteToRegister(color);
+    }
+
     void coalesceRegisters()
     {
         foreach (move_edge; this.move_edges)
         {
             auto src = move_edge.source;
             auto dst = move_edge.destination;
-
-            if (!src.isRegister() || !dst.isRegister())
-                continue;
 
             if (src.v_register in this.pre_colored || dst.v_register in this.pre_colored)
                 continue;
