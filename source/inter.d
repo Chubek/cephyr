@@ -320,7 +320,7 @@ struct Register
 
     static Register fromColor(int color)
     {
-	// TODO
+        // TODO
     }
 }
 
@@ -339,6 +339,7 @@ struct Label
     int id;
     static int id_counter;
     bool reserved;
+    IRInstruction* used_in;
 
     union
     {
@@ -357,6 +358,11 @@ struct Label
         this.kind = Kind.InRegister;
         this.v_register = v_register;
         this.reserved = true;
+    }
+
+    void setUsedIn(IRInstruction* instr)
+    {
+        this.used_in = instr;
     }
 
     size_t toHash()
@@ -463,6 +469,9 @@ class IRInstruction
         this.dst = dst;
         this.srcs = srcs;
         this.id = this.id_counter++;
+
+        foreach (ref label; this.srcs ~ this.dst)
+            label.setUsedIn(&this);
 
         final switch (op)
         {
