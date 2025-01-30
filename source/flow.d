@@ -429,11 +429,11 @@ class FlowGraph
     {
         Interference interf;
 
-        auto live_out_exprs = liveness.live_out;
+        auto live_out_sets = liveness.live_out;
 
         foreach (node; this.nodes[])
         {
-            auto live_out_set = live_out_exprs[node];
+            auto live_out_set = live_out_sets[node];
             foreach (label_outer; live_out_set)
             {
                 foreach (label_inner; live_out_set)
