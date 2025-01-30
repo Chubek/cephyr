@@ -61,7 +61,7 @@ class FlowGraph
     alias Loops = Set!Nodes;
     alias Exprs = Set!Label[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
-    alias Liveness = Tuple!(Set!Label, "live_in", Set!Label, "live_out");
+    alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
     alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
     alias LiveRanges = Set!LiveRange[Label];
     alias Interference = Set!Label[Label];
@@ -429,11 +429,22 @@ class FlowGraph
     {
         Interference interf;
 
-        auto live_out_sets = liveness.live_out;
+        auto live_out_exprs = liveness.live_out;
 
-        foreach (_, live_out_set; live_out_sets)
+        foreach (node; this.nodes[])
         {
+            auto live_out_set = live_out_exprs[node];
+            foreach (label_outer; live_out_set)
+            {
+                foreach (label_inner; live_out_set)
+                {
+                    if (label_inner == labe_outer)
+                        continue;
 
+                    interf[label_outer] ~= label_inner;
+                    interf[label_inner] ~= label_outer;
+                }
+            }
         }
 
         return interf;
