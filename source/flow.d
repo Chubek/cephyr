@@ -7,7 +7,6 @@ import cephyr.set;
 import cephyr.stack;
 import cephyr.queue;
 import cephyr.inter;
-import cephyr.temporary;
 
 class FlowNode
 {
@@ -61,6 +60,7 @@ class FlowGraph
     alias Loops = Set!Nodes;
     alias Exprs = Set!Label[FlowNode];
     alias AvailExprs = Tuple!(Exprs, "in", Exprs, "out");
+    alias ReachingExprs = Exprs;
     alias Liveness = Tuple!(Exprs, "live_in", Exprs, "live_out");
     alias LiveRange = Tuple!(InstrID, "start", InstrID, "end");
     alias LiveRanges = Set!LiveRange[Label];
@@ -427,7 +427,7 @@ class FlowGraph
 
     Interference computeInterference(Liveness liveness)
     {
-        Interference interf;
+        Interference output;
 
         auto live_out_sets = liveness.live_out;
 
@@ -441,13 +441,13 @@ class FlowGraph
                     if (label_inner == labe_outer)
                         continue;
 
-                    interf[label_outer] ~= label_inner;
-                    interf[label_inner] ~= label_outer;
+                    output[label_outer] ~= label_inner;
+                    output[label_inner] ~= label_outer;
                 }
             }
         }
 
-        return interf;
+        return output;
     }
 
     NestingTree buildLoopNestingTree(Loops loops)
@@ -483,7 +483,7 @@ class FlowGraph
         return output;
     }
 
-    NestingDepth calculateNestingDepths(NestingTree nesting_tree)
+    NestingDepth computeNestingDepths(NestingTree nesting_tree)
     {
         NestingDepth output;
 
@@ -502,13 +502,13 @@ class FlowGraph
         return output;
     }
 
-    NestingInstr calculateInstrNestingDepths(NestingDepths nesting_depths)
+    NestingInstr computeInstrNestingDepths(NestingDepths nesting_depths)
     {
         NestingInstr output;
 
         foreach (node; this.nodes[])
         {
-            foreach (instr; node.getAllInstructions().opSlice())
+            foreach (instr; node.getAllInstructions()[])
             {
                 auto max_depth = 0;
                 foreach (loop, depth; nesting_depths)
@@ -523,7 +523,7 @@ class FlowGraph
         return output;
     }
 
-    AccessFreq calculateAccessFrequencies()
+    AccessFreq computeAccessFrequencies()
     {
         AccessFreq output = null;
 
@@ -543,4 +543,30 @@ class FlowGraph
         return output;
     }
 
+    ReachingExprs computeReachingExprs()
+    {
+        ReachingExprs input;
+        Exprs output;
+
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (node; this.nodes[])
+            {
+                auto old_input = input[node].dup;
+                auto old_output = output[node].dup;
+
+                foreach (pred; node.predecessors[])
+                    input[node] = input[node] + output[pred];
+
+                output[node] = (input[node] - node.kills) + node.generates;
+
+                if (input[node] != old_input || output[node] != old_out)
+                    changed = true;
+            }
+        }
+
+	return input;
+    }
 }
