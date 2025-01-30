@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"Chubak Bidpaa"
+	],
+	"copyright": "Copyright © 2025, Chubak Bidpaa",
+	"description": "A retargetable compiler for ISO/IEC C",
+	"license": "MIT",
+	"name": "cephyr"
+}
