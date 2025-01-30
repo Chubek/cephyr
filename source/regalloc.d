@@ -7,17 +7,10 @@ import cephyr.flow;
 import cephyr.stack;
 import cephyr.inter;
 
-class RegisterAllocator
+class RegisterAllocator : FlowGraph
 {
     enum NUM_REGISTERS = 21;
 
-    alias Interference = FlowGraph.Interference;
-    alias Liveness = FlowGraph.Liveness;
-    alias LiveRanges = FlowGraph.LiveRanges;
-    alias NestingDepths = FlowGraph.NestingDepths;
-    alias NestingInstr = FlowGraph.NestingInstr;
-    alias AccessFreq = FlowGraph.AccessFreq;
-    alias MoveEdges = FlowGraph.MoveEdges;
     alias Instructions = Set!IRInstruction;
     alias RegisterSet = Set!Register;
     alias LabelStack = Stack!Label;
@@ -114,16 +107,16 @@ class RegisterAllocator
             auto live_range = this.live_ranges[label];
             auto start = live_range.start;
             auto end = live_range.end;
-            auto live_span = end - start;
+            auto lifespan = end - start;
 
             auto total_depth = 0;
             foreach (instr_id; start .. end)
             {
                 total_depth += this.nesting_instr[instr_id];
             }
-            auto average_depth = floor(total_depth / live_span);
+            auto average_depth = floor(total_depth / lifespan);
 
-            return this.acc_freq[label] * live_span * (1 + average_depth);
+            return this.acc_freq[label] * lifespan * (1 + average_depth);
         }
 
         foreach (label, _; this.interf)
